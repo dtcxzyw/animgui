@@ -10,7 +10,8 @@ namespace animgui {
     class font;
 
     class property {
-        std::variant<std::monostate, std::pmr::unordered_map<uid, std::shared_ptr<property>>, bool, float, int, color> m_value;
+        std::variant<std::monostate, std::pmr::unordered_map<uid, std::shared_ptr<property>, uid_hasher>, bool, float, int, color>
+            m_value;
 
     public:
         property() noexcept : m_value{ std::monostate{} } {}

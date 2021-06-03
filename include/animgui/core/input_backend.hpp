@@ -4,7 +4,7 @@
 #include "common.hpp"
 
 namespace animgui {
-    enum class key_code {
+    enum class key_code : uint32_t {
         left_button = 0x01,
         right_button = 0x02,
         middle_button = 0x04,

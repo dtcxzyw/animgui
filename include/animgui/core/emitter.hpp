@@ -6,11 +6,12 @@
 #include <vector>
 
 namespace animgui {
+    struct style;
     class font;
 
     struct button_base final {
+        vec2 anchor;
         vec2 content_size;
-        color color;
     };
 
     // TODO: affine transform
@@ -26,34 +27,34 @@ namespace animgui {
     struct canvas_line final {
         vec2 start, end;
         color color;
+        float size;
     };
     struct canvas_point final {
         vec2 pos;
         color color;
+        float size;
     };
     struct canvas_image final {
+        bounds bounds;
         texture_region tex;
         color factor;
     };
     struct canvas_text final {
+        vec2 pos;
         std::pmr::string str;
         std::shared_ptr<font> font;
         color color;
     };
 
     struct extended_callback final {
-        std::pmr::vector<command> command_list;
-        bounds bounds;
+        std::function<void(const bounds&, std::pmr::vector<command>&, style&,
+                           const std::function<texture_region(font&, uint32_t)>&)>
+            emitter;
+        vec2 bounds;
     };
 
-    // TODO: shadow/motion blur?
-    struct primitive final {
-        vec2 base;
-        std::variant<button_base, canvas_fill_rect, canvas_stroke_rect, canvas_line, canvas_point, canvas_image, canvas_text>
-            desc;
-
-        primitive() = delete;
-    };
+    using primitive = std::variant<button_base, canvas_fill_rect, canvas_stroke_rect, canvas_line, canvas_point, canvas_image,
+                                   canvas_text, extended_callback>;
 
     struct push_region final {
         bounds bounds;
@@ -70,7 +71,8 @@ namespace animgui {
         emitter& operator=(emitter&&) = default;
         virtual ~emitter() = default;
 
-        virtual std::pmr::vector<command> transform(std::pmr::vector<operation> operations) = 0;
-        virtual bounds calculate_bounds(primitive primitive) = 0;
+        virtual std::pmr::vector<command> transform(vec2 size, span<operation> operations, style& style,
+                                                    const std::function<texture_region(font&, uint32_t)>& font_callback) = 0;
+        virtual vec2 calculate_bounds(const primitive& primitive) = 0;
     };
 }  // namespace animgui

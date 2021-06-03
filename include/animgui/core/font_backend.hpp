@@ -2,9 +2,7 @@
 
 #pragma once
 #include "common.hpp"
-
 #include <memory>
-#include <string>
 
 namespace animgui {
     struct image_desc;
@@ -19,10 +17,10 @@ namespace animgui {
         virtual ~font() = default;
 
         [[nodiscard]] virtual float height() const noexcept = 0;
-        [[nodiscard]] virtual float calculate_width(std::pmr::string str) const = 0;
+        [[nodiscard]] virtual float calculate_width(uint32_t codepoint) const = 0;
         [[nodiscard]] virtual bool exists(uint32_t codepoint) const = 0;
         [[nodiscard]] virtual vec2 bounds() const = 0;
-        [[nodiscard]] virtual void render_to_bitmap(uint32_t codepoint, const image_desc& dest) const = 0;
+        virtual void render_to_bitmap(uint32_t codepoint, const image_desc& dest) const = 0;
     };
     // TODO: SDF
     class font_backend {

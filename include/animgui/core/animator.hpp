@@ -7,7 +7,7 @@
 namespace animgui {
     using step_function = std::function<float(float, void*)>;  // value=step(destination,state)
 
-    //TODO: enter & exit
+    // TODO: enter & exit
     class animator {
     public:
         animator() = default;
@@ -17,7 +17,8 @@ namespace animgui {
         animator& operator=(const animator& rhs) = delete;
         animator& operator=(animator&& rhs) = default;
 
-        [[nodiscard]] virtual std::pair<size_t, size_t> state_storage() const noexcept;
+        // hash/size/alignment
+        [[nodiscard]] virtual std::tuple<size_t, size_t, size_t> state_storage() const noexcept;
         [[nodiscard]] virtual step_function step(float delta_t) const = 0;
     };
 }  // namespace animgui

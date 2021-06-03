@@ -9,7 +9,7 @@
 
 namespace animgui {
     // TODO: SDF
-    enum class channel : uint32_t { alpha, rgb, rgba };
+    enum class channel : uint32_t { alpha = 0, rgb = 1, rgba = 2 };
     struct image_desc final {
         uint32_t width;
         uint32_t height;
@@ -35,7 +35,7 @@ namespace animgui {
     struct texture_region final {
         std::shared_ptr<texture> texture;
         bounds region;
-        texture_region sub_region(const bounds& bounds) const;
+        [[nodiscard]] texture_region sub_region(const bounds& bounds) const;
     };
 
     struct native_drawback final {
@@ -50,6 +50,7 @@ namespace animgui {
         vec2 tex_coord;
     };
 
+    // TODO: unique vertices buffer
     struct primitives final {
         primitive_type type;
         std::pmr::vector<vertex> vertices;
@@ -57,7 +58,7 @@ namespace animgui {
         float point_line_size;
     };
 
-    enum class cursor { normal, hand, horizontal, vertical, edit, cross_hair };
+    enum class cursor { arrow, hand, horizontal, vertical, edit, cross_hair };
 
     struct command final {
         bounds clip;
