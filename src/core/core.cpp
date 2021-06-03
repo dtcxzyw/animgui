@@ -8,6 +8,7 @@
 #include <animgui/core/style.hpp>
 #include <optional>
 #include <stack>
+#include <set>
 
 namespace animgui {
     class state_manager final {
@@ -210,17 +211,114 @@ namespace animgui {
     class compacted_image final {
         std::shared_ptr<texture> m_texture;
         static constexpr uint32_t margin = 1;
+        struct tree_node final {
+            vec2 size;
+            vec2 pos;
+            std::vector<std::shared_ptr<tree_node>> sons;
+            std::shared_ptr<tree_node> father;
+        };
+        struct list_node final {
+            std::shared_ptr<tree_node> master;
+            std::shared_ptr<list_node> prev, next;
+        };
+        uint32_t m_tex_w, tex_h;
+        std::shared_ptr<tree_node> m_tree_root;
+        std::shared_ptr<list_node> m_leaf_head;
+
+        void link(std::shared_ptr<list_node>& lhs, std::shared_ptr<list_node>& rhs) {
+            if(lhs != nullptr)
+                lhs->next = rhs;
+            if(rhs != nullptr)
+                rhs->prev = lhs;
+        }
+
+        std::pair<std::shared_ptr<list_node>, std::shared_ptr<list_node>> dislink(std::shared_ptr<list_node>& u) {
+            auto prev = u->prev;
+            auto next = u->next;
+            if(prev != nullptr)
+                prev->next = next;
+            if(next != nullptr)
+                next->prev = prev;
+            return std::make_pair(prev, next);
+        }
+
 
     public:
-        explicit compacted_image(std::shared_ptr<texture> texture) : m_texture{ std::move(texture) } {}
+        explicit compacted_image(std::shared_ptr<texture> texture) : m_texture{ std::move(texture) } {
+            m_tex_w = m_texture->texture_size().first;
+            tex_h = m_texture->texture_size().second;
+
+            m_tree_root = std::make_shared<tree_node>();
+            m_tree_root->size.x = 0;
+            m_tree_root->size.y = tex_h;
+            m_tree_root->pos.x = m_tree_root->pos.y = 0;
+
+            m_leaf_head = std::make_shared<list_node>();
+
+            auto init = std::make_shared<list_node>();
+            init->master = m_tree_root;
+            link(m_leaf_head, init);
+        }
         [[nodiscard]] std::shared_ptr<texture> texture() const {
             return m_texture;
         }
         std::optional<bounds> allocate(const image_desc& image) {
-            // notice: no padding
+            std::shared_ptr<tree_node> node(std::make_shared<tree_node>());
+            node->size.x = image.width + margin * 2;
+            node->size.y = image.height + margin * 2;
+
+            std::shared_ptr<list_node> leaf(std::make_shared<list_node>());
+            leaf->master = node;
+
+            std::shared_ptr<list_node> u;
+            for(u = m_leaf_head->next; u != nullptr; u = u->next) {
+                if(u->master->size.y >= node->size.y && u->master->pos.x + u->master->size.x + node->size.x <= m_tex_w) {
+                    u->master->sons.push_back(node);
+                    node->father = u;
+                    node->pos.x = u->master->pos.x + u->master->size.x;
+                    node->pos.y = u->master->pos.y;
+
+                    auto pair = dislink(u);
+                    link(pair.first, leaf);
+                    link(leaf, pair.second);
+
+                    bounds res;
+                    res.left = node->pos.x + margin;
+                    res.right = node->pos.x + margin + node->size.x;
+                    res.bottom = node->pos.y + margin;
+                    res.top = node->pos.y + margin + node->size.y;
+                    m_texture->update_texture(res.left, res.bottom, image);
+                    return res;
+                }
+                if(u->master != m_tree_root) {
+                    auto fa = u->master->father;
+                    if(fa->sons.back() == u->master) {
+                        if(fa->pos.y + fa->size.y - (u->master->pos.y + u->master->size.y) >= node->size.y &&
+                           fa->pos.x + fa->size.x + node->size.x <= m_tex_w) {
+                            fa->sons.push_back(node);
+                            node->father = fa;
+                            node->pos.x = fa->pos.x + fa->size.x;
+                            node->pos.y = u->master->pos.y + u->master->size.y;
+
+                            auto next = u->next;
+                            link(u, leaf);
+                            link(leaf, next);
+
+                            bounds res;
+                            res.left = node->pos.x + margin;
+                            res.right = node->pos.x + margin + node->size.x;
+                            res.bottom = node->pos.y + margin;
+                            res.top = node->pos.y + margin + node->size.y;
+                            m_texture->update_texture(res.left, res.bottom, image);
+                            return res;
+                        }
+                    }
+                }
+            }
             return std::nullopt;
         }
     };
+
     class image_compactor final {
         std::pmr::vector<compacted_image> m_images[3];
         render_backend& m_backend;
