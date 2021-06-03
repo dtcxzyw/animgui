@@ -38,9 +38,9 @@ namespace animgui {
         uint32_t fallback_codepoint;
         std::shared_ptr<font> default_font;
 
-        color fallback_background_color;
-        color fallback_foreground_color;
-        color fallback_font_color;
+        color default_background_color;
+        color default_foreground_color;
+        color default_font_color;
 
         std::shared_ptr<property> property;
     };
