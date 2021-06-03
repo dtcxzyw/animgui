@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: MIT
 
 #pragma once
-#include "common.hpp"
 #include <memory>
 
 namespace animgui {
@@ -19,7 +18,6 @@ namespace animgui {
         [[nodiscard]] virtual float height() const noexcept = 0;
         [[nodiscard]] virtual float calculate_width(uint32_t codepoint) const = 0;
         [[nodiscard]] virtual bool exists(uint32_t codepoint) const = 0;
-        [[nodiscard]] virtual vec2 bounds() const = 0;
         virtual void render_to_bitmap(uint32_t codepoint, const image_desc& dest) const = 0;
     };
     // TODO: SDF

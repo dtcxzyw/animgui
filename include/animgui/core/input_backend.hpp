@@ -10,6 +10,7 @@ namespace animgui {
         middle_button = 0x04,
         back = 0x08,
         tab = 0x09,
+        enter = 0x0D,
         shift = 0x10,
         control = 0x11,
         menu = 0x12,
@@ -17,6 +18,8 @@ namespace animgui {
         capital = 0x14,
         escape = 0x1B,
         space = 0x20,
+        page_up = 0x21,
+        page_down = 0x22,
         end = 0x23,
         home = 0x24,
         left = 0x25,
@@ -75,12 +78,24 @@ namespace animgui {
         f10 = 0x79,
         f11 = 0x7A,
         f12 = 0x7B,
+        equal = 0x92,
         left_shift = 0xA0,
         right_shift = 0xA1,
         left_control = 0xA2,
         right_control = 0xA3,
-        left_menu = 0xA4,
-        right_menu = 0xA5
+        left_alt = 0xA4,
+        right_alt = 0xA5,
+        semicolon = 0xBA,
+        comma = 0xBC,
+        minus = 0xBD,
+        period = 0xBE,
+        slash = 0xBF,
+        grave_accent = 0xC0,
+        left_bracket = 0xDB,
+        backslash = 0xDC,
+        right_bracket = 0xDD,
+        apostrophe = 0xDE,
+        max = 0xFF,
     };
 
     class input_backend {
@@ -92,11 +107,11 @@ namespace animgui {
         input_backend& operator=(input_backend&&) = default;
         virtual ~input_backend() = default;
 
-        virtual void set_clipboard_text(std::pmr::string str) = 0;
+        virtual void set_clipboard_text(const std::pmr::string& str) = 0;
         virtual std::pmr::string get_clipboard_text() = 0;
 
         virtual vec2 get_cursor_pos() = 0;
         virtual bool get_key(key_code code) = 0;
-        // TODO: game pad
+        // TODO: game pad & drop & scroll
     };
 }  // namespace animgui

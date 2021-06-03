@@ -14,8 +14,8 @@ namespace animgui {
         }
     };
 
-    std::unique_ptr<animator> create_dummy_animator() {
-        return std::make_unique<dummy_animator>();
+    std::shared_ptr<animator> create_dummy_animator() {
+        return std::make_shared<dummy_animator>();
     }
 
     class linear_animator final : public animator {
@@ -42,8 +42,8 @@ namespace animgui {
         }
     };
 
-    std::unique_ptr<animator> create_linear_animator(float speed) {
-        return std::make_unique<linear_animator>(speed);
+    std::shared_ptr<animator> create_linear_animator(float speed) {
+        return std::make_shared<linear_animator>(speed);
     }
 
     class physical_animator final : public animator {
@@ -67,7 +67,7 @@ namespace animgui {
         }
     };
 
-    std::unique_ptr<animator> create_physical_animator(const float speed) {
-        return std::make_unique<physical_animator>(speed);
+    std::shared_ptr<animator> create_physical_animator(const float speed) {
+        return std::make_shared<physical_animator>(speed);
     }
 }  // namespace animgui

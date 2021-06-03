@@ -5,5 +5,5 @@
 
 namespace animgui {
     class render_backend;
-    std::unique_ptr<render_backend> create_opengl3_backend();
+    std::shared_ptr<render_backend> create_opengl3_backend();
 }  // namespace animgui

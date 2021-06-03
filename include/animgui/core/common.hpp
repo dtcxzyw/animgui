@@ -5,6 +5,23 @@
 #include <memory_resource>
 #include <stack>
 
+// https://blog.kowalczyk.info/article/j/guide-to-predefined-macros-in-c-compilers-gcc-clang-msvc-etc..html
+#if _WIN32
+#define ANIMGUI_WINDOWS
+#elif __linux__ && !__ANDROID__
+#define ANIMGUI_LINUX
+#elif __APPLE__
+#define ANIMGUI_MACOS
+#else
+#error "Unsupported platform"
+#endif
+
+#if defined(ANIMGUI_WINDOWS)
+#define ANIMGUI_API
+#else
+#define ANIMGUI_API
+#endif
+
 namespace animgui {
     struct color final {
         float r, g, b, a;

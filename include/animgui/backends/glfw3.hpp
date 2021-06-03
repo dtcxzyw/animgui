@@ -2,9 +2,9 @@
 
 #pragma once
 #include <memory>
-struct GLFWWindow;
+struct GLFWwindow;
 
 namespace animgui {
     class input_backend;
-    std::unique_ptr<input_backend> create_glfw3_backend(GLFWWindow* window);
+    std::shared_ptr<input_backend> create_glfw3_backend(GLFWwindow* window);
 }  // namespace animgui

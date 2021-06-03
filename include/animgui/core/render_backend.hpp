@@ -79,6 +79,7 @@ namespace animgui {
         // TODO: lazy update
         virtual void update_command_list(std::pmr::vector<command> command_list) = 0;
         virtual void set_cursor(cursor cursor) = 0;
+        virtual cursor cursor() = 0;
         virtual std::shared_ptr<texture> create_texture(uint32_t width, uint32_t height, channel channels) = 0;
         virtual std::shared_ptr<texture> create_texture_from_native_handle(uint64_t handle, uint32_t width, uint32_t height,
                                                                            channel channels) = 0;

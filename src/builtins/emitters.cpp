@@ -239,7 +239,7 @@ namespace animgui {
             return command_list;
         }
     };
-    std::unique_ptr<emitter> create_builtin_emitter(std::pmr::memory_resource* memory_resource) {
-        return std::make_unique<builtin_emitter>(memory_resource);
+    std::shared_ptr<emitter> create_builtin_emitter(std::pmr::memory_resource* memory_resource) {
+        return std::make_shared<builtin_emitter>(memory_resource);
     }
 }  // namespace animgui
