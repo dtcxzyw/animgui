@@ -9,10 +9,6 @@ namespace animgui {
     using raw_callback = void (*)(void*, size_t);
 
     class canvas {
-    protected:
-        virtual void* raw_storage(size_t hash, uid uid) = 0;
-        virtual void register_type(size_t hash, size_t size, size_t alignment, raw_callback ctor, raw_callback dtor) = 0;
-
     public:
         canvas() = default;
         virtual ~canvas() = default;
@@ -21,10 +17,12 @@ namespace animgui {
         canvas& operator=(const canvas& rhs) = delete;
         canvas& operator=(canvas&& rhs) = default;
 
-        virtual uid push_region(uid uid, const bounds& bounds) = 0;
+        virtual std::pair<size_t, uid> push_region(uid uid, const bounds& bounds) = 0;
         virtual void pop_region() = 0;
-        virtual uid add_primitive(uid uid, primitive primitive) = 0;
+        virtual std::pair<size_t, uid> add_primitive(uid uid, primitive primitive) = 0;
         virtual style& style() noexcept = 0;
+        virtual void* raw_storage(size_t hash, uid uid) = 0;
+        virtual void register_type(size_t hash, size_t size, size_t alignment, raw_callback ctor, raw_callback dtor) = 0;
         template <typename T>
         T& storage(const uid uid) {
             const auto hash = typeid(T).hash_code();
@@ -48,5 +46,6 @@ namespace animgui {
         [[nodiscard]] virtual float step(uid id, float dest) = 0;
         [[nodiscard]] virtual std::pmr::memory_resource* memory_resource() const noexcept = 0;
         [[nodiscard]] virtual vec2 calculate_bounds(const primitive& primitive) const = 0;
+        [[nodiscard]] virtual uid region_sub_uid() = 0;
     };
 }  // namespace animgui

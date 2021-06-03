@@ -24,8 +24,8 @@ namespace animgui {
             merge_bounds(render_rect, clip_rect);
             const auto p0 = vec2{ render_rect.left, render_rect.top }, p1 = vec2{ render_rect.left, render_rect.bottom },
                        p2 = vec2{ render_rect.right, render_rect.bottom }, p3 = vec2{ render_rect.right, render_rect.top };
-            const auto back = style.fallback_background_color;
-            const auto front = style.fallback_foreground_color;
+            const auto back = style.default_background_color;
+            const auto front = style.default_foreground_color;
             const auto unused = vec2{ 0.0f, 0.0f };
             commands.push_back(
                 { rect,
@@ -166,9 +166,29 @@ namespace animgui {
             auto beg = item.str.begin();
             const auto end = item.str.end();
             while(const auto cp = utf8::next(beg, end)) {
-                const auto tex = font_callback(*item.font, cp);
+                const auto tex = item.font->exists(cp) ?
+                    font_callback(*item.font, cp) :
+                    font_callback(*style.fallback_font, style.fallback_font->exists(cp) ? cp : style.fallback_codepoint);
+                const auto w = item.font->calculate_width(cp);
+                const auto h = item.font->height();
+                const auto render_rect = bounds{ rect.left, rect.left + h, rect.top, rect.top + h };
+                auto clipped = render_rect;
+                if(!clip_bounds(clipped, clip_rect))
+                    break;
 
-                rect.left += item.font->calculate_width(cp);
+                const auto p0 = vec2{ render_rect.left, render_rect.top }, p1 = vec2{ render_rect.left, render_rect.bottom },
+                           p2 = vec2{ render_rect.right, render_rect.bottom }, p3 = vec2{ render_rect.right, render_rect.top };
+                const auto [s0, s1, t0, t1] = tex.region;
+                commands.push_back({ rect,
+                                     primitives{ primitive_type::triangle_strip,
+                                                 { { { p0, item.color, { s0, t0 } },
+                                                     { p1, item.color, { s0, t1 } },
+                                                     { p3, item.color, { s1, t0 } },
+                                                     { p2, item.color, { s1, t1 } } },
+                                                   commands.get_allocator().resource() },
+                                                 tex.texture,
+                                                 0.0f } });
+                rect.left += w;
             }
         }
         static vec2 calc_bounds(const extended_callback& item) {
@@ -188,7 +208,7 @@ namespace animgui {
         std::pmr::vector<command> transform(const vec2 size, span<operation> operations, style& style,
                                             const std::function<texture_region(font&, uint32_t)>& font_callback) override {
             std::pmr::vector<command> command_list{ m_memory_resource };
-            std::stack<bounds, std::pmr::deque<bounds>> clip_stack{ m_memory_resource };
+            stack<bounds> clip_stack{ m_memory_resource };
             clip_stack.push({ 0.0f, size.x, 0.0f, size.y });
             uint32_t clip_discard = 0;
 

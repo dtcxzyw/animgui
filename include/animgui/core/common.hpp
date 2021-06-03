@@ -3,6 +3,7 @@
 #pragma once
 #include <cstdint>
 #include <memory_resource>
+#include <stack>
 
 namespace animgui {
     struct color final {
@@ -76,7 +77,16 @@ namespace animgui {
         [[nodiscard]] size_t size() const noexcept {
             return m_end - m_begin;
         }
+        [[nodiscard]] span subspan(size_t offset) const noexcept {
+            return { m_begin + offset, m_end };
+        }
+        [[nodiscard]] T& operator[](size_t idx) const noexcept {
+            return m_begin[idx];
+        }
     };
+
+    template <typename T>
+    using stack = std::stack<T, std::pmr::deque<T>>;
 }  // namespace animgui
 
 constexpr animgui::uid operator""_id(const char* str, const std::size_t len) {
