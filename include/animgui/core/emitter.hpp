@@ -2,16 +2,18 @@
 
 #pragma once
 #include "render_backend.hpp"
-
 #include <vector>
 
 namespace animgui {
     struct style;
     class font;
 
+    enum class button_status { normal, hovered, pressed, disabled };
+
     struct button_base final {
         vec2 anchor;
         vec2 content_size;
+        button_status status;
     };
 
     // TODO: affine transform
@@ -47,7 +49,7 @@ namespace animgui {
     };
 
     struct extended_callback final {
-        std::function<void(const bounds&, std::pmr::vector<command>&, style&,
+        std::function<void(const bounds&, std::pmr::vector<command>&, const style&,
                            const std::function<texture_region(font&, uint32_t)>&)>
             emitter;
         vec2 bounds;
@@ -71,8 +73,8 @@ namespace animgui {
         emitter& operator=(emitter&&) = default;
         virtual ~emitter() = default;
 
-        virtual std::pmr::vector<command> transform(vec2 size, span<operation> operations, style& style,
+        virtual std::pmr::vector<command> transform(vec2 size, span<operation> operations, const style& style,
                                                     const std::function<texture_region(font&, uint32_t)>& font_callback) = 0;
-        virtual vec2 calculate_bounds(const primitive& primitive) = 0;
+        virtual vec2 calculate_bounds(const primitive& primitive, const style& style) = 0;
     };
 }  // namespace animgui

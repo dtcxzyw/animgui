@@ -10,7 +10,7 @@
 namespace animgui {
     void text(canvas& canvas, std::pmr::string str) {
         primitive text =
-            canvas_text{ vec2{ 0.0f, 0.0f }, std::move(str), canvas.style().default_font, canvas.style().default_font_color };
+            canvas_text{ vec2{ 0.0f, 0.0f }, std::move(str), canvas.style().default_font, canvas.style().font_color };
         const auto [w, h] = canvas.calculate_bounds(text);
         canvas.push_region(canvas.region_sub_uid(), bounds{ 0.0f, w, 0.0f, h });
         canvas.add_primitive("content"_id, std::move(text));
@@ -18,10 +18,14 @@ namespace animgui {
     }
     bool button_with_content(canvas& canvas, const std::function<void(animgui::canvas&)>& render_function) {
         const auto [region_idx, region_uid] = canvas.push_region(canvas.region_sub_uid(), bounds{ 0.0f, 0.0f, 0.0f, 0.0f });
-        // bool hovered = canvas.region_hovered();
+        const auto hovered = canvas.region_hovered();
         const auto pressed = canvas.region_pressed(key_code::left_button);
         const auto res = pressed;
-        auto [idx, uid] = canvas.add_primitive("button_base"_id, button_base{ { 0.0f, 0.0f }, { 0.0f, 0.0f } });
+        auto [idx, uid] = canvas.add_primitive(
+            "button_base"_id,
+            button_base{ { 0.0f, 0.0f },
+                         { 0.0f, 0.0f },
+                         pressed ? button_status::pressed : (hovered ? button_status::hovered : button_status::normal) });
         const auto content_size = layout_row(canvas, row_alignment::middle, render_function);
         auto&& inst = std::get<button_base>(std::get<primitive>(canvas.commands()[idx]));
         inst.content_size = content_size;

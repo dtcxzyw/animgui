@@ -34,8 +34,8 @@ namespace animgui {
             return m_height;
         }
         void render_to_bitmap(const uint32_t codepoint, const image_desc& dest) const override {
-            stbtt_MakeCodepointBitmap(&m_font_info, const_cast<uint8_t*>(static_cast<const uint8_t*>(dest.data)), dest.width,
-                                      dest.height, dest.width, m_scale, m_scale, codepoint);
+            stbtt_MakeCodepointBitmap(&m_font_info, const_cast<uint8_t*>(static_cast<const uint8_t*>(dest.data)), dest.size.x,
+                                      dest.size.y, dest.size.x, m_scale, m_scale, codepoint);
         }
         [[nodiscard]] float calculate_width(const uint32_t codepoint) const override {
             int x0, y0, x1, y1;

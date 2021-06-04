@@ -29,6 +29,9 @@ namespace animgui {
     struct vec2 final {
         float x, y;
     };
+    struct uvec2 final {
+        uint32_t x, y;
+    };
     struct bounds final {
         float left, right, top, bottom;
     };

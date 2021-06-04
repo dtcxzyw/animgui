@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 
 #include <animgui/builtins/layouts.hpp>
+#include <animgui/core/style.hpp>
 
 namespace animgui {
     std::pmr::memory_resource* layout_proxy::memory_resource() const noexcept {
@@ -65,8 +66,6 @@ namespace animgui {
     class row_layout_canvas_impl final : public row_layout_canvas {
         row_alignment m_alignment;
         uint32_t m_current_depth = 0;
-        float m_leading = 5.0f;  // TODO: style
-        float m_spacing = 5.0f;
         float m_vertical_offset = 0.0f;
         float m_max_total_width = 0.0f;
 
@@ -83,13 +82,13 @@ namespace animgui {
             }
             const auto width = reserved_size().x;
             if(!m_current_line.empty()) {
-                const auto total_width = width_sum + (static_cast<float>(m_current_line.size()) - 1) * m_spacing;
+                const auto total_width = width_sum + (static_cast<float>(m_current_line.size()) - 1) * style().spacing.x;
                 m_max_total_width = std::fmaxf(m_max_total_width, total_width);
                 auto alignment = m_alignment;
                 if(alignment == row_alignment::justify && (m_current_line.size() == 1 || total_width > width))
                     alignment = row_alignment::middle;
                 auto offset = 0.0f;
-                auto spacing = m_spacing;
+                auto spacing = style().spacing.x;
 
                 switch(alignment) {
                     case row_alignment::left:
@@ -108,14 +107,14 @@ namespace animgui {
 
                 const auto span = commands();
                 for(auto&& [id, idx, size] : m_current_line) {
-                    const auto new_bounds = { m_offset, m_offset + size.x, m_vertical_offset, m_vertical_offset + size.y };
+                    const auto new_bounds = bounds{ offset, offset + size.x, m_vertical_offset, m_vertical_offset + size.y };
                     std::get<animgui::push_region>(span[idx]).bounds = new_bounds;
                     storage<bounds>(mix(id, "last_bounds"_id)) = new_bounds;
                     offset += size.x + spacing;
                 }
             }
 
-            m_vertical_offset += max_height + m_leading;
+            m_vertical_offset += max_height + style().spacing.y;
             m_current_line.clear();
         }
 
@@ -123,11 +122,11 @@ namespace animgui {
         row_layout_canvas_impl(canvas& parent, const row_alignment alignment)
             : row_layout_canvas{ parent }, m_alignment{ alignment }, m_current_line{ parent.memory_resource() } {}
         std::pair<size_t, uid> push_region(const uid uid, const bounds& bounds) override {
-            const auto [id, idx] = layout_proxy::push_region(uid, bounds);
+            const auto [idx, id] = layout_proxy::push_region(uid, bounds);
             if(++m_current_depth == 1) {
                 m_current_line.emplace_back(id, idx, vec2{});
             }
-            return { id, idx };
+            return { idx, id };
         }
         void pop_region() override {
             if(--m_current_depth == 0) {
@@ -141,7 +140,7 @@ namespace animgui {
         }
         vec2 finish() {
             flush();
-            return { m_max_total_width, m_vertical_offset - m_leading };
+            return { m_max_total_width, m_vertical_offset - style().spacing.y };
         }
     };
 

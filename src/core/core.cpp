@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MIT
 
+#include <animgui/builtins/styles.hpp>
 #include <animgui/core/animator.hpp>
 #include <animgui/core/canvas.hpp>
 #include <animgui/core/context.hpp>
@@ -8,8 +9,8 @@
 #include <animgui/core/style.hpp>
 #include <optional>
 #include <random>
-#include <stack>
 #include <set>
+#include <stack>
 
 namespace animgui {
     class state_manager final {
@@ -126,7 +127,9 @@ namespace animgui {
             m_animation_state_hash = hash;
             m_state_manager.register_type(
                 hash, state_size, alignment, [](void*, size_t) {}, [](void*, size_t) {});
-            m_region_stack.push(std::make_tuple(std::numeric_limits<size_t>::max(), uid{ 0 }, std::minstd_rand{ 0 }));
+            m_region_stack.push(std::make_tuple(
+                std::numeric_limits<size_t>::max(), uid{ 0 },
+                std::minstd_rand{ static_cast<uint32_t>(std::chrono::high_resolution_clock::now().time_since_epoch().count()) }));
         }
         animgui::style& style() noexcept override {
             return m_context.style();
@@ -199,12 +202,13 @@ namespace animgui {
             return m_cursor;
         }
         [[nodiscard]] vec2 calculate_bounds(const primitive& primitive) const override {
-            return m_emitter.calculate_bounds(primitive);
+            return m_emitter.calculate_bounds(primitive, m_context.style());
         }
         uid region_sub_uid() override {
             return mix(current_region_uid(), uid{ std::get<std::minstd_rand>(m_region_stack.top())() });
         }
     };
+
     class command_optimizer final {
     public:
         [[nodiscard]] std::pmr::vector<command> optimize(const std::pmr::vector<command>& src) const {
@@ -214,31 +218,36 @@ namespace animgui {
         }
     };
 
+    static constexpr uint32_t image_pool_size = 1024;
+
     class compacted_image final {
         std::shared_ptr<texture> m_texture;
+        std::pmr::memory_resource* m_memory_resource;
+
         static constexpr uint32_t margin = 1;
         struct tree_node final {
-            vec2 size;
-            vec2 pos;
-            std::vector<std::shared_ptr<tree_node>> sons;
-            std::shared_ptr<tree_node> father;
+            uvec2 size;
+            uvec2 pos;
+            std::pmr::vector<std::shared_ptr<tree_node>> children;
+            std::shared_ptr<tree_node> parent;
+            explicit tree_node(std::pmr::memory_resource* memory_resource) : size{}, pos{}, children{ memory_resource } {}
         };
         struct list_node final {
             std::shared_ptr<tree_node> master;
             std::shared_ptr<list_node> prev, next;
         };
-        uint32_t m_tex_w, tex_h;
+        uint32_t m_tex_w, m_tex_h;
         std::shared_ptr<tree_node> m_tree_root;
         std::shared_ptr<list_node> m_leaf_head;
 
-        void link(std::shared_ptr<list_node>& lhs, std::shared_ptr<list_node>& rhs) {
+        static void link(std::shared_ptr<list_node>& lhs, std::shared_ptr<list_node>& rhs) {
             if(lhs != nullptr)
                 lhs->next = rhs;
             if(rhs != nullptr)
                 rhs->prev = lhs;
         }
 
-        std::pair<std::shared_ptr<list_node>, std::shared_ptr<list_node>> dislink(std::shared_ptr<list_node>& u) {
+        static std::pair<std::shared_ptr<list_node>, std::shared_ptr<list_node>> unlink(std::shared_ptr<list_node>& u) {
             auto prev = u->prev;
             auto next = u->next;
             if(prev != nullptr)
@@ -248,15 +257,22 @@ namespace animgui {
             return std::make_pair(prev, next);
         }
 
+        [[nodiscard]] bounds update_texture(const uvec2 offset, const image_desc& image) const {
+            m_texture->update_texture(offset, image);
+            constexpr float norm = image_pool_size;
+            return { static_cast<float>(offset.x) / norm, static_cast<float>(offset.x + image.size.x) / norm,
+                     static_cast<float>(offset.y) / norm, static_cast<float>(offset.y + image.size.y) / norm };
+        }
 
     public:
-        explicit compacted_image(std::shared_ptr<texture> texture) : m_texture{ std::move(texture) } {
-            m_tex_w = m_texture->texture_size().first;
-            tex_h = m_texture->texture_size().second;
+        explicit compacted_image(std::shared_ptr<texture> texture, std::pmr::memory_resource* memory_resource)
+            : m_texture{ std::move(texture) }, m_memory_resource{ memory_resource } {
+            m_tex_w = image_pool_size;
+            m_tex_h = image_pool_size;
 
-            m_tree_root = std::make_shared<tree_node>();
+            m_tree_root = std::make_shared<tree_node>(memory_resource);
             m_tree_root->size.x = 0;
-            m_tree_root->size.y = tex_h;
+            m_tree_root->size.y = m_tex_h;
             m_tree_root->pos.x = m_tree_root->pos.y = 0;
 
             m_leaf_head = std::make_shared<list_node>();
@@ -269,54 +285,40 @@ namespace animgui {
             return m_texture;
         }
         std::optional<bounds> allocate(const image_desc& image) {
-            std::shared_ptr<tree_node> node(std::make_shared<tree_node>());
-            node->size.x = image.width + margin * 2;
-            node->size.y = image.height + margin * 2;
+            auto node = std::make_shared<tree_node>(m_memory_resource);
+            node->size.x = image.size.x + margin * 2;
+            node->size.y = image.size.y + margin * 2;
 
-            std::shared_ptr<list_node> leaf(std::make_shared<list_node>());
+            auto leaf = std::make_shared<list_node>();
             leaf->master = node;
 
-            std::shared_ptr<list_node> u;
-            for(u = m_leaf_head->next; u != nullptr; u = u->next) {
+            for(auto u = m_leaf_head->next; u != nullptr; u = u->next) {
                 if(u->master->size.y >= node->size.y && u->master->pos.x + u->master->size.x + node->size.x <= m_tex_w) {
-                    u->master->sons.push_back(node);
-                    node->father = u;
+                    u->master->children.push_back(node);
+                    node->parent = u->master;
                     node->pos.x = u->master->pos.x + u->master->size.x;
                     node->pos.y = u->master->pos.y;
 
-                    auto pair = dislink(u);
+                    auto pair = unlink(u);
                     link(pair.first, leaf);
                     link(leaf, pair.second);
 
-                    bounds res;
-                    res.left = node->pos.x + margin;
-                    res.right = node->pos.x + margin + node->size.x;
-                    res.bottom = node->pos.y + margin;
-                    res.top = node->pos.y + margin + node->size.y;
-                    m_texture->update_texture(res.left, res.bottom, image);
-                    return res;
+                    return update_texture(node->pos, image);
                 }
                 if(u->master != m_tree_root) {
-                    auto fa = u->master->father;
-                    if(fa->sons.back() == u->master) {
-                        if(fa->pos.y + fa->size.y - (u->master->pos.y + u->master->size.y) >= node->size.y &&
-                           fa->pos.x + fa->size.x + node->size.x <= m_tex_w) {
-                            fa->sons.push_back(node);
-                            node->father = fa;
-                            node->pos.x = fa->pos.x + fa->size.x;
+                    if(auto&& parent = u->master->parent; parent->children.back() == u->master) {
+                        if(parent->pos.y + parent->size.y - (u->master->pos.y + u->master->size.y) >= node->size.y &&
+                           parent->pos.x + parent->size.x + node->size.x <= m_tex_w) {
+                            parent->children.push_back(node);
+                            node->parent = parent;
+                            node->pos.x = parent->pos.x + parent->size.x;
                             node->pos.y = u->master->pos.y + u->master->size.y;
 
                             auto next = u->next;
                             link(u, leaf);
                             link(leaf, next);
 
-                            bounds res;
-                            res.left = node->pos.x + margin;
-                            res.right = node->pos.x + margin + node->size.x;
-                            res.bottom = node->pos.y + margin;
-                            res.top = node->pos.y + margin + node->size.y;
-                            m_texture->update_texture(res.left, res.bottom, image);
-                            return res;
+                            return update_texture(node->pos, image);
                         }
                     }
                 }
@@ -328,13 +330,14 @@ namespace animgui {
     class image_compactor final {
         std::pmr::vector<compacted_image> m_images[3];
         render_backend& m_backend;
-        static constexpr uint32_t image_pool_size = 1024;
+        std::pmr::memory_resource* m_memory_resource;
 
     public:
-        explicit image_compactor(render_backend& render_backend, std::pmr::memory_resource* memory_manager)
-            : m_images{ std::pmr::vector<compacted_image>{ memory_manager }, std::pmr::vector<compacted_image>{ memory_manager },
-                        std::pmr::vector<compacted_image>{ memory_manager } },
-              m_backend{ render_backend } {}
+        explicit image_compactor(render_backend& render_backend, std::pmr::memory_resource* memory_resource)
+            : m_images{ std::pmr::vector<compacted_image>{ memory_resource },
+                        std::pmr::vector<compacted_image>{ memory_resource },
+                        std::pmr::vector<compacted_image>{ memory_resource } },
+              m_backend{ render_backend }, m_memory_resource{ memory_resource } {}
         ~image_compactor() = default;
         image_compactor(const image_compactor& rhs) = delete;
         image_compactor(image_compactor&& rhs) = default;
@@ -346,9 +349,9 @@ namespace animgui {
                 images.clear();
         }
         texture_region compact(const image_desc& image) {
-            if(std::max(image.width, image.height) >= image_pool_size) {
-                auto tex = m_backend.create_texture(image.width, image.height, image.channels);
-                tex->update_texture(0, 0, image);
+            if(std::max(image.size.x, image.size.y) >= image_pool_size) {
+                auto tex = m_backend.create_texture(image.size, image.channels);
+                tex->update_texture(uvec2{ 0, 0 }, image);
                 return { tex, bounds{ 0.0f, 1.0f, 0.0f, 1.0f } };
             }
             auto& images = m_images[static_cast<uint32_t>(image.channels)];
@@ -357,7 +360,8 @@ namespace animgui {
                     return { pool.texture(), bounds.value() };
                 }
             }
-            images.emplace_back(m_backend.create_texture(image_pool_size, image_pool_size, image.channels));
+            images.emplace_back(m_backend.create_texture({ image_pool_size, image_pool_size }, image.channels),
+                                m_memory_resource);
             auto&& pool = images.back();
             return { pool.texture(), pool.allocate(image).value() };
         }
@@ -388,7 +392,7 @@ namespace animgui {
                 const auto height = static_cast<uint32_t>(ceil(font.height()));
                 const auto width = static_cast<uint32_t>(ceil(font.calculate_width(codepoint)));
                 std::pmr::vector<std::byte> buffer{ width * height, m_lut.get_allocator().resource() };
-                const image_desc image{ width, height, channel::alpha, buffer.data() };
+                const image_desc image{ { width, height }, channel::alpha, buffer.data() };
                 font.render_to_bitmap(codepoint, image);
                 return lut.emplace(codepoint, m_image_compactor.compact(image)).first->second;
             }
@@ -414,9 +418,10 @@ namespace animgui {
             : m_input_backend{ input_backend }, m_render_backend{ render_backend }, m_emitter{ emitter }, m_animator{ animator },
               m_state_manager{ memory_resource }, m_image_compactor{ render_backend, memory_resource },
               m_codepoint_locator{ m_image_compactor, memory_resource }, m_memory_resource{ memory_resource }, m_style{
-                  nullptr, '?', nullptr, { 0.0f, 0.0f, 0.0f, 1.0f }, { 1.0f, 1.0f, 1.0f, 1.0f }, { 1.0f, 1.0f, 1.0f, 1.0f },
-                  nullptr
-              } {}
+                  nullptr, '?', nullptr, {}, {}, {}, {}, {}, {}, {}, 0.0f
+              } {
+            set_classic_style(*this);
+        }
         void reset_cache() override {
             m_state_manager.reset();
             m_codepoint_locator.reset();

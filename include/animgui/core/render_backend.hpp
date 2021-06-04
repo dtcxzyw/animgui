@@ -11,8 +11,7 @@ namespace animgui {
     // TODO: SDF
     enum class channel : uint32_t { alpha = 0, rgb = 1, rgba = 2 };
     struct image_desc final {
-        uint32_t width;
-        uint32_t height;
+        uvec2 size;
         channel channels;
         const void* data;
     };
@@ -26,8 +25,8 @@ namespace animgui {
         texture& operator=(texture&&) = default;
         virtual ~texture() = default;
 
-        virtual void update_texture(uint32_t offset_x, uint32_t offset_y, const image_desc& image) = 0;
-        [[nodiscard]] virtual std::pair<uint32_t, uint32_t> texture_size() const noexcept = 0;
+        virtual void update_texture(uvec2 offset, const image_desc& image) = 0;
+        [[nodiscard]] virtual uvec2 texture_size() const noexcept = 0;
         [[nodiscard]] virtual channel channels() const noexcept = 0;
         [[nodiscard]] virtual uint64_t native_handle() const noexcept = 0;
     };
@@ -80,9 +79,8 @@ namespace animgui {
         virtual void update_command_list(std::pmr::vector<command> command_list) = 0;
         virtual void set_cursor(cursor cursor) = 0;
         virtual cursor cursor() = 0;
-        virtual std::shared_ptr<texture> create_texture(uint32_t width, uint32_t height, channel channels) = 0;
-        virtual std::shared_ptr<texture> create_texture_from_native_handle(uint64_t handle, uint32_t width, uint32_t height,
-                                                                           channel channels) = 0;
+        virtual std::shared_ptr<texture> create_texture(uvec2 size, channel channels) = 0;
+        virtual std::shared_ptr<texture> create_texture_from_native_handle(uint64_t handle, uvec2 size, channel channels) = 0;
         virtual void emit() = 0;
     };
 }  // namespace animgui

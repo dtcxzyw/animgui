@@ -18,7 +18,7 @@ namespace animgui {
         animator& operator=(animator&& rhs) = default;
 
         // hash/size/alignment
-        [[nodiscard]] virtual std::tuple<size_t, size_t, size_t> state_storage() const noexcept;
+        [[nodiscard]] virtual std::tuple<size_t, size_t, size_t> state_storage() const noexcept = 0;
         [[nodiscard]] virtual step_function step(float delta_t) const = 0;
     };
 }  // namespace animgui
