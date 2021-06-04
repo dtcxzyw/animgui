@@ -11,6 +11,7 @@
 #include <random>
 #include <set>
 #include <stack>
+#include <list>
 
 namespace animgui {
     class state_manager final {
@@ -221,43 +222,26 @@ namespace animgui {
     static constexpr uint32_t image_pool_size = 1024;
 
     class compacted_image final {
+        static constexpr uint32_t margin = 1;
+
         std::shared_ptr<texture> m_texture;
         std::pmr::memory_resource* m_memory_resource;
 
-        static constexpr uint32_t margin = 1;
         struct tree_node final {
             uvec2 size;
             uvec2 pos;
             std::pmr::vector<std::shared_ptr<tree_node>> children;
-            std::shared_ptr<tree_node> parent;
-            explicit tree_node(std::pmr::memory_resource* memory_resource) : size{}, pos{}, children{ memory_resource } {}
+            tree_node* parent;
+            explicit tree_node(std::pmr::memory_resource* memory_resource) : size{}, pos{}, children{ memory_resource }, parent(nullptr) {}
         };
-        struct list_node final {
-            std::shared_ptr<tree_node> master;
-            std::shared_ptr<list_node> prev, next;
-        };
+
         uint32_t m_tex_w, m_tex_h;
+        std::pmr::list<tree_node*> m_list;
         std::shared_ptr<tree_node> m_tree_root;
-        std::shared_ptr<list_node> m_leaf_head;
 
-        static void link(std::shared_ptr<list_node>& lhs, std::shared_ptr<list_node>& rhs) {
-            if(lhs != nullptr)
-                lhs->next = rhs;
-            if(rhs != nullptr)
-                rhs->prev = lhs;
-        }
-
-        static std::pair<std::shared_ptr<list_node>, std::shared_ptr<list_node>> unlink(std::shared_ptr<list_node>& u) {
-            auto prev = u->prev;
-            auto next = u->next;
-            if(prev != nullptr)
-                prev->next = next;
-            if(next != nullptr)
-                next->prev = prev;
-            return std::make_pair(prev, next);
-        }
-
-        [[nodiscard]] bounds update_texture(const uvec2 offset, const image_desc& image) const {
+        [[nodiscard]] bounds update_texture(uvec2 offset, const image_desc& image) const {
+            offset.x += margin;
+            offset.y += margin;
             m_texture->update_texture(offset, image);
             constexpr float norm = image_pool_size;
             return { static_cast<float>(offset.x) / norm, static_cast<float>(offset.x + image.size.x) / norm,
@@ -275,49 +259,34 @@ namespace animgui {
             m_tree_root->size.y = m_tex_h;
             m_tree_root->pos.x = m_tree_root->pos.y = 0;
 
-            m_leaf_head = std::make_shared<list_node>();
-
-            auto init = std::make_shared<list_node>();
-            init->master = m_tree_root;
-            link(m_leaf_head, init);
+            m_list.push_back(m_tree_root.get());
         }
         [[nodiscard]] std::shared_ptr<texture> texture() const {
             return m_texture;
         }
         std::optional<bounds> allocate(const image_desc& image) {
-            auto node = std::make_shared<tree_node>(m_memory_resource);
+            const auto node = std::make_shared<tree_node>(m_memory_resource);
             node->size.x = image.size.x + margin * 2;
             node->size.y = image.size.y + margin * 2;
 
-            auto leaf = std::make_shared<list_node>();
-            leaf->master = node;
-
-            for(auto u = m_leaf_head->next; u != nullptr; u = u->next) {
-                if(u->master->size.y >= node->size.y && u->master->pos.x + u->master->size.x + node->size.x <= m_tex_w) {
-                    u->master->children.push_back(node);
-                    node->parent = u->master;
-                    node->pos.x = u->master->pos.x + u->master->size.x;
-                    node->pos.y = u->master->pos.y;
-
-                    auto pair = unlink(u);
-                    link(pair.first, leaf);
-                    link(leaf, pair.second);
-
+            for(auto it = m_list.begin(); it != m_list.end(); ++it) {
+                if((*it)->size.y >= node->size.y && (*it)->pos.x + (*it)->size.x + node->size.x <= m_tex_w) {
+                    (*it)->children.push_back(node);
+                    node->parent = (*it);
+                    node->pos.x = (*it)->pos.x + (*it)->size.x;
+                    node->pos.y = (*it)->pos.y;
+                    (*it) = node.get();
                     return update_texture(node->pos, image);
                 }
-                if(u->master != m_tree_root) {
-                    if(auto&& parent = u->master->parent; parent->children.back() == u->master) {
-                        if(parent->pos.y + parent->size.y - (u->master->pos.y + u->master->size.y) >= node->size.y &&
+                if((*it) != m_tree_root.get()) {
+                    if(auto&& parent = (*it)->parent; parent->children.back().get() == (*it)) {
+                        if(parent->pos.y + parent->size.y - ((*it)->pos.y + (*it)->size.y) >= node->size.y &&
                            parent->pos.x + parent->size.x + node->size.x <= m_tex_w) {
                             parent->children.push_back(node);
                             node->parent = parent;
                             node->pos.x = parent->pos.x + parent->size.x;
-                            node->pos.y = u->master->pos.y + u->master->size.y;
-
-                            auto next = u->next;
-                            link(u, leaf);
-                            link(leaf, next);
-
+                            node->pos.y = (*it)->pos.y + (*it)->size.y;
+                            m_list.insert(std::next(it), node.get());
                             return update_texture(node->pos, image);
                         }
                     }
