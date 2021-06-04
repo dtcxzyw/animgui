@@ -14,3 +14,12 @@ if(BACKEND_STB_FONT)
     add_library(backend_stb_font SHARED stbfont.cpp)
     target_include_directories(backend_stb_font PRIVATE ${STB_INCLUDE_DIRS})
 endif()
+
+
+set(BACKEND_OPENGL3 on)
+if(BACKEND_OPENGL3)
+    find_package(GLEW REQUIRED)
+    add_library(backend_opengl3 SHARED opengl3.cpp)
+    target_link_libraries(backend_opengl3 PRIVATE GLEW::GLEW)
+endif()
+

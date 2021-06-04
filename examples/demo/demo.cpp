@@ -74,7 +74,9 @@ int main() {
 
             ctx->new_frame(w, h, delta_t, render);
 
-            ogl3_backend->emit();
+            glClearColor(0, 0, 0, 1);
+            glClear(GL_COLOR_BUFFER_BIT);
+            ogl3_backend->emit(animgui::uvec2{static_cast<uint32_t>(w), static_cast<uint32_t>(h)});
             glfwSwapBuffers(window);
         }
     }

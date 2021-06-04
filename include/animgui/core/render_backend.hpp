@@ -17,6 +17,7 @@ namespace animgui {
     };
 
     class texture {
+
     public:
         texture() = default;
         texture(const texture&) = delete;
@@ -45,8 +46,8 @@ namespace animgui {
 
     struct vertex final {
         vec2 pos;
-        color color;
         vec2 tex_coord;
+        color color;
     };
 
     // TODO: unique vertices buffer
@@ -75,12 +76,11 @@ namespace animgui {
         render_backend& operator=(render_backend&&) = default;
         virtual ~render_backend() = default;
 
-        // TODO: lazy update
         virtual void update_command_list(std::pmr::vector<command> command_list) = 0;
-        virtual void set_cursor(cursor cursor) = 0;
-        virtual cursor cursor() = 0;
+        virtual void set_cursor(cursor cursor) noexcept = 0;
+        [[nodiscard]] virtual cursor cursor() const noexcept = 0;
         virtual std::shared_ptr<texture> create_texture(uvec2 size, channel channels) = 0;
         virtual std::shared_ptr<texture> create_texture_from_native_handle(uint64_t handle, uvec2 size, channel channels) = 0;
-        virtual void emit() = 0;
+        virtual void emit(uvec2 screen_size) = 0;
     };
 }  // namespace animgui
