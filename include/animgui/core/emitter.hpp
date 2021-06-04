@@ -8,7 +8,7 @@ namespace animgui {
     struct style;
     class font;
 
-    enum class button_status { normal, hovered, pressed, disabled };
+    enum class ANIMGUI_API button_status { normal, hovered, pressed, disabled };
 
     struct button_base final {
         vec2 anchor;

@@ -17,7 +17,11 @@
 #endif
 
 #if defined(ANIMGUI_WINDOWS)
-#define ANIMGUI_API
+#if defined(ANIMGUI_EXPORT)
+#define ANIMGUI_API __declspec(dllexport)
+#else
+#define ANIMGUI_API __declspec(dllimport)
+#endif
 #else
 #define ANIMGUI_API
 #endif
@@ -81,7 +85,7 @@ namespace animgui {
 
     // TODO: use std::span
     template <typename T>
-    class span {
+    class span final {
         T* m_begin;
         T* m_end;
 

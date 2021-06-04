@@ -8,6 +8,7 @@ namespace animgui {
     struct style;
     using raw_callback = void (*)(void*, size_t);
 
+    // TODO: focus to a widget
     class canvas {
     public:
         canvas() = default;
