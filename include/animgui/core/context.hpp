@@ -33,8 +33,8 @@ namespace animgui {
         virtual style& style() noexcept = 0;
     };
 
-    std::unique_ptr<context> create_animgui_context(input_backend& input_backend, render_backend& render_backend,
-                                                    emitter& emitter, animator& animator,
-                                                    std::pmr::memory_resource* memory_manager = std::pmr::get_default_resource());
+    ANIMGUI_API std::unique_ptr<context>
+    create_animgui_context(input_backend& input_backend, render_backend& render_backend, emitter& emitter, animator& animator,
+                           std::pmr::memory_resource* memory_manager = std::pmr::get_default_resource());
 
 };  // namespace animgui
