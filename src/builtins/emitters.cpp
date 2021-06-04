@@ -39,14 +39,14 @@ namespace animgui {
             commands.push_back(
                 { clip_rect,
                   primitives{ primitive_type::triangle_strip,
-                              { { { p0, back, unused }, { p1, back, unused }, { p3, back, unused }, { p2, back, unused } },
+                              { { { p0, unused, back }, { p1, unused, back }, { p3, unused, back }, { p2, unused, back } },
                                 commands.get_allocator().resource() },
                               nullptr,
                               0.0f } });
             commands.push_back(
                 { clip_rect,
                   primitives{ primitive_type::line_loop,
-                              { { { p0, front, unused }, { p1, front, unused }, { p2, front, unused }, { p3, front, unused } },
+                              { { { p0, unused, front }, { p1, unused, front }, { p2, unused, front }, { p3, unused, front } },
                                 commands.get_allocator().resource() },
                               nullptr,
                               1.0f } });
@@ -67,10 +67,10 @@ namespace animgui {
             const auto unused = vec2{ 0.0f, 0.0f };
             commands.push_back({ clip_rect,
                                  primitives{ primitive_type::line_loop,
-                                             { { { p0, item.color, unused },
-                                                 { p1, item.color, unused },
-                                                 { p2, item.color, unused },
-                                                 { p3, item.color, unused } },
+                                             { { { p0, unused, item.color },
+                                                 { p1, unused, item.color },
+                                                 { p2, unused, item.color },
+                                                 { p3, unused, item.color } },
                                                commands.get_allocator().resource() },
                                              nullptr,
                                              item.size } });
@@ -88,10 +88,10 @@ namespace animgui {
             const auto unused = vec2{ 0.0f, 0.0f };
             commands.push_back({ clip_rect,
                                  primitives{ primitive_type::triangle_strip,
-                                             { { { p0, item.color, unused },
-                                                 { p1, item.color, unused },
-                                                 { p3, item.color, unused },
-                                                 { p2, item.color, unused } },
+                                             { { { p0, unused, item.color },
+                                                 { p1, unused, item.color },
+                                                 { p3, unused, item.color },
+                                                 { p2, unused, item.color } },
                                                commands.get_allocator().resource() },
                                              nullptr,
                                              0.0f } });
@@ -113,7 +113,7 @@ namespace animgui {
             commands.push_back(
                 { clip_rect,
                   primitives{ primitive_type::lines,
-                              { { { p0, item.color, unused }, { p1, item.color, unused } }, commands.get_allocator().resource() },
+                              { { { p0, unused, item.color }, { p1, unused, item.color } }, commands.get_allocator().resource() },
                               nullptr,
                               item.size } });
         }
@@ -130,7 +130,7 @@ namespace animgui {
             commands.push_back(
                 { clip_rect,
                   primitives{ primitive_type::points,
-                              { { { { item.pos.x + clip_rect.left, item.pos.y + clip_rect.top }, item.color, unused } },
+                              { { { { item.pos.x + clip_rect.left, item.pos.y + clip_rect.top }, unused, item.color } },
                                 commands.get_allocator().resource() },
                               nullptr,
                               item.size } });
@@ -150,10 +150,10 @@ namespace animgui {
             const auto [s0, s1, t0, t1] = item.tex.region;
             commands.push_back({ clip_rect,
                                  primitives{ primitive_type::triangle_strip,
-                                             { { { p0, item.factor, { s0, t0 } },
-                                                 { p1, item.factor, { s0, t1 } },
-                                                 { p3, item.factor, { s1, t0 } },
-                                                 { p2, item.factor, { s1, t1 } } },
+                                             { { { p0, { s0, t0 }, item.factor },
+                                                 { p1, { s0, t1 }, item.factor },
+                                                 { p3, { s1, t0 }, item.factor },
+                                                 { p2, { s1, t1 }, item.factor } },
                                                commands.get_allocator().resource() },
                                              item.tex.texture,
                                              0.0f } });
@@ -187,10 +187,10 @@ namespace animgui {
                 const auto [s0, s1, t0, t1] = tex.region;
                 commands.push_back({ clip_rect,
                                      primitives{ primitive_type::triangle_strip,
-                                                 { { { p0, item.color, { s0, t0 } },
-                                                     { p1, item.color, { s0, t1 } },
-                                                     { p3, item.color, { s1, t0 } },
-                                                     { p2, item.color, { s1, t1 } } },
+                                                 { { { p0, { s0, t0 }, item.color},
+                                                     { p1, { s0, t1 }, item.color },
+                                                     { p3, { s1, t0 }, item.color },
+                                                     { p2, { s1, t1 }, item.color } },
                                                    commands.get_allocator().resource() },
                                                  tex.texture,
                                                  0.0f } });
