@@ -40,9 +40,13 @@ namespace animgui {
         out vec4 out_frag_color;
 
         uniform sampler2D tex;
+        uniform int alpha;
 
         void main() {
-         	out_frag_color = texture(tex, f_tex_coord) * f_color;
+            if(alpha==1)
+                out_frag_color = texture(tex, f_tex_coord).xxxw * f_color;
+            else
+                out_frag_color = texture(tex, f_tex_coord) * f_color;
         }
 
         )";
@@ -177,8 +181,8 @@ namespace animgui {
             glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
             glUseProgram(m_program_id);
-            const auto location = glGetUniformLocation(m_program_id, "size");
-            glUniform2f(location, size.x, size.y);
+            glUniform2f(glGetUniformLocation(m_program_id, "size"), size.x, size.y);
+            glUniform1i(glGetUniformLocation(m_program_id, "alpha"), (texture && texture->channels() == channel::alpha) ? 1 : 0);
 
             glBindBuffer(GL_ARRAY_BUFFER, m_vbo);
             glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(vertex), vertices.data(), GL_STREAM_DRAW);
