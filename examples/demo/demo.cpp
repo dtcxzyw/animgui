@@ -21,7 +21,7 @@
 }
 
 void render(animgui::canvas& canvas) {
-    animgui::layout_row(canvas, animgui::row_alignment::justify, [](animgui::row_layout_canvas& layout) {
+    animgui::layout_row_center(canvas, [](animgui::row_layout_canvas& layout) {
         animgui::text(layout, "Hello World 你好 世界");
         layout.newline();
         static uint32_t count = 0;

@@ -7,10 +7,10 @@ namespace animgui {
     std::pmr::memory_resource* layout_proxy::memory_resource() const noexcept {
         return m_parent.memory_resource();
     }
-    vec2 layout_proxy::reserved_size() {
+    vec2 layout_proxy::reserved_size() const noexcept {
         return m_parent.reserved_size();
     }
-    bounds layout_proxy::region_bounds() const {
+    const bounds& layout_proxy::region_bounds() const {
         return m_parent.region_bounds();
     }
     void* layout_proxy::raw_storage(const size_t hash, const uid uid) {
@@ -36,7 +36,7 @@ namespace animgui {
     bool layout_proxy::pressed(const key_code key, const bounds& bounds) const {
         return m_parent.pressed(key, bounds);
     }
-    void layout_proxy::set_cursor(const cursor cursor) {
+    void layout_proxy::set_cursor(const cursor cursor) noexcept {
         m_parent.set_cursor(cursor);
     }
     std::pair<size_t, uid> layout_proxy::add_primitive(const uid uid, primitive primitive) {
@@ -53,7 +53,7 @@ namespace animgui {
     vec2 layout_proxy::calculate_bounds(const primitive& primitive) const {
         return m_parent.calculate_bounds(primitive);
     }
-    span<operation> layout_proxy::commands() {
+    span<operation> layout_proxy::commands() noexcept {
         return m_parent.commands().subspan(m_offset);
     }
     float layout_proxy::step(const uid id, const float dest) {
@@ -148,10 +148,36 @@ namespace animgui {
         }
     };
 
-    vec2 layout_row(canvas& parent, const row_alignment alignment,
-                    const std::function<void(row_layout_canvas&)>& render_function) {
+    ANIMGUI_API vec2 layout_row(canvas& parent, const row_alignment alignment,
+                                const std::function<void(row_layout_canvas&)>& render_function) {
         row_layout_canvas_impl canvas{ parent, alignment };
         render_function(canvas);
         return canvas.finish();
+    }
+
+    ANIMGUI_API bounds layout_row_center(canvas& parent, const std::function<void(row_layout_canvas&)>& render_function) {
+        parent.push_region("layout_center_region"_id);
+        const auto [w, h] = layout_row(parent, row_alignment::middle, render_function);
+        const auto offset_y = (parent.reserved_size().y - h) / 2.0f;
+        const auto bounds = animgui::bounds{ 0.0f, parent.reserved_size().x, offset_y, offset_y + h };
+        parent.pop_region(bounds);
+        return bounds;
+    }
+
+    class panel_canvas final : public layout_proxy {
+        vec2 m_size;
+
+    public:
+        panel_canvas(canvas& parent, const vec2 size) : layout_proxy{ parent }, m_size{ size } {}
+        [[nodiscard]] vec2 reserved_size() const noexcept override {
+            return m_size;
+        }
+    };
+
+    ANIMGUI_API void panel(canvas& parent, const vec2 size, const std::function<void(canvas&)>& render_function) {
+        parent.push_region(parent.region_sub_uid(), bounds{ 0.0f, size.x, 0.0f, size.y });
+        panel_canvas canvas{ parent, size };
+        render_function(canvas);
+        parent.pop_region();
     }
 }  // namespace animgui

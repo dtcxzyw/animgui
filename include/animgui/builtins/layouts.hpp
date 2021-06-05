@@ -13,9 +13,9 @@ namespace animgui {
 
     public:
         explicit layout_proxy(canvas& parent) noexcept : m_parent{ parent }, m_offset{ parent.commands().size() } {}
-        vec2 reserved_size() override;
+        [[nodiscard]] vec2 reserved_size() const noexcept override;
         void* raw_storage(size_t hash, uid uid) final;
-        [[nodiscard]] bounds region_bounds() const override;
+        [[nodiscard]] const bounds& region_bounds() const override;
         [[nodiscard]] bool region_hovered() const override;
         [[nodiscard]] bool region_pressed(key_code key) const override;
         void register_type(size_t hash, size_t size, size_t alignment, raw_callback ctor, raw_callback dtor) final;
@@ -23,11 +23,11 @@ namespace animgui {
         [[nodiscard]] bool pressed(key_code key, const bounds& bounds) const override;
         std::pair<size_t, uid> push_region(uid uid, const std::optional<bounds>& reserved_bounds) override;
         std::pair<size_t, uid> add_primitive(uid uid, primitive primitive) override;
-        void set_cursor(cursor cursor) final;
+        void set_cursor(cursor cursor) noexcept final;
         float step(uid id, float dest) final;
         animgui::style& style() noexcept final;
         [[nodiscard]] vec2 calculate_bounds(const primitive& primitive) const final;
-        span<operation> commands() final;
+        span<operation> commands() noexcept final;
         [[nodiscard]] bool hovered(const bounds& bounds) const override;
         [[nodiscard]] std::pmr::memory_resource* memory_resource() const noexcept final;
         uid region_sub_uid() override;
@@ -62,7 +62,7 @@ namespace animgui {
     ANIMGUI_API void multiple_window(canvas& parent, const std::function<void(multiple_window_canvas&)>& render_function);
     ANIMGUI_API void docking(canvas& parent, const std::function<void(multiple_window_canvas&)>& render_function);
 
-    void panel(canvas& parent, vec2 size, const std::function<void(canvas&)>& render_function);
+    ANIMGUI_API void panel(canvas& parent, vec2 size, const std::function<void(canvas&)>& render_function);
 
     class tab_canvas : public layout_proxy {
     public:
