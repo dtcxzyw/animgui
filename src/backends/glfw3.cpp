@@ -256,7 +256,7 @@ namespace animgui {
         }
     };
 
-    std::shared_ptr<input_backend> create_glfw3_backend(GLFWwindow* window) {
+    ANIMGUI_API std::shared_ptr<input_backend> create_glfw3_backend(GLFWwindow* window) {
         return std::make_shared<glfw3_backend>(window);
     }
 }  // namespace animgui

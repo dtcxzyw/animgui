@@ -7,11 +7,11 @@
 #include <animgui/core/font_backend.hpp>
 #include <animgui/core/input_backend.hpp>
 #include <animgui/core/style.hpp>
+#include <list>
 #include <optional>
 #include <random>
 #include <set>
 #include <stack>
-#include <list>
 
 namespace animgui {
     class state_manager final {
@@ -232,7 +232,8 @@ namespace animgui {
             uvec2 pos;
             std::pmr::vector<std::shared_ptr<tree_node>> children;
             tree_node* parent;
-            explicit tree_node(std::pmr::memory_resource* memory_resource) : size{}, pos{}, children{ memory_resource }, parent(nullptr) {}
+            explicit tree_node(std::pmr::memory_resource* memory_resource)
+                : size{}, pos{}, children{ memory_resource }, parent(nullptr) {}
         };
 
         uint32_t m_tex_w, m_tex_h;
@@ -355,7 +356,7 @@ namespace animgui {
             m_lut.clear();
         }
         texture_region locate(font& font, const uint32_t codepoint) {
-            auto lut = locate(font);
+            auto&& lut = locate(font);
             const auto iter = lut.find(codepoint);
             if(iter == lut.cend()) {
                 const auto height = static_cast<uint32_t>(ceil(font.height()));

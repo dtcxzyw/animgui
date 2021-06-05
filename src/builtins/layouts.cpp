@@ -129,11 +129,11 @@ namespace animgui {
             return { idx, id };
         }
         void pop_region() override {
+            m_parent.pop_region();
             if(--m_current_depth == 0) {
-                const auto [x1, x2, y1, y2] = region_bounds();
+                const auto [x1, x2, y1, y2] = storage<bounds>(mix(std::get<uid>(m_current_line.back()), "last_bounds"_id));
                 std::get<vec2>(m_current_line.back()) = { x2 - x1, y2 - y1 };
             }
-            m_parent.pop_region();
         }
         void newline() override {
             flush();

@@ -15,19 +15,19 @@ namespace fs = std::filesystem;
 namespace animgui {
     // TODO: handle character advance/positioning
     class font_impl final : public font {
+        std::pmr::vector<uint8_t> m_font_data;
         stbtt_fontinfo m_font_info;
         float m_height, m_scale;
 
     public:
         font_impl(const fs::path& path, const float height, std::pmr::memory_resource* memory_resource)
-            : m_font_info{}, m_height{ height }, m_scale{ 0.0f } {
-            std::pmr::vector<uint8_t> buffer{ fs::file_size(path), memory_resource };
+            : m_font_data{ fs::file_size(path), memory_resource }, m_font_info{}, m_height{ height }, m_scale{ 0.0f } {
             {
                 std::ifstream in{ path, std::ios::in | std::ios::binary };
-                in.read(reinterpret_cast<char*>(buffer.data()), buffer.size());
+                in.read(reinterpret_cast<char*>(m_font_data.data()), m_font_data.size());
                 in.close();
             }
-            stbtt_InitFont(&m_font_info, buffer.data(), stbtt_GetFontOffsetForIndex(buffer.data(), 0));
+            stbtt_InitFont(&m_font_info, m_font_data.data(), stbtt_GetFontOffsetForIndex(m_font_data.data(), 0));
             m_scale = stbtt_ScaleForPixelHeight(&m_font_info, height);
         }
         [[nodiscard]] float height() const noexcept override {
@@ -81,7 +81,7 @@ namespace animgui {
             return std::make_shared<font_impl>(path, height, name.get_allocator().resource());
         }
     };
-    std::shared_ptr<font_backend> create_stb_font_backend() {
+    ANIMGUI_API std::shared_ptr<font_backend> create_stb_font_backend() {
         return std::make_shared<stb_font_backend>();
     }
 }  // namespace animgui

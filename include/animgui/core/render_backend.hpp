@@ -38,9 +38,7 @@ namespace animgui {
         [[nodiscard]] texture_region sub_region(const bounds& bounds) const;
     };
 
-    struct native_drawback final {
-        std::function<void(bounds)> callback;
-    };
+    using native_callback = std::function<void(const bounds&)>;
 
     enum class primitive_type : uint32_t { points, lines, line_strip, line_loop, triangles, triangle_fan, triangle_strip, quads };
 
@@ -62,7 +60,7 @@ namespace animgui {
 
     struct command final {
         bounds clip;
-        std::variant<native_drawback, primitives> desc;
+        std::variant<native_callback, primitives> desc;
 
         command() = delete;
     };
