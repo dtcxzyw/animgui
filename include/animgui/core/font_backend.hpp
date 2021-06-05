@@ -27,7 +27,7 @@ namespace animgui {
         [[nodiscard]] virtual float line_spacing() const noexcept = 0;
         [[nodiscard]] virtual glyph to_glyph(uint32_t codepoint) const = 0;
         [[nodiscard]] virtual float calculate_advance(glyph glyph, animgui::glyph prev) const = 0;
-        virtual bounds calculate_bounds(glyph glyph) const = 0;
+        [[nodiscard]] virtual bounds calculate_bounds(glyph glyph) const = 0;
         virtual texture_region render_to_bitmap(glyph glyph,
                                                 const std::function<texture_region(const image_desc&)>& image_uploader) const = 0;
     };

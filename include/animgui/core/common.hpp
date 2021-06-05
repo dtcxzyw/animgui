@@ -111,6 +111,11 @@ namespace animgui {
 
     template <typename T>
     using stack = std::stack<T, std::pmr::deque<T>>;
+
+    template <typename T, typename U>
+    static constexpr void* offset(U T::*ptr) {
+        return &(reinterpret_cast<T*>(0)->*ptr);
+    }
 }  // namespace animgui
 
 constexpr animgui::uid operator""_id(const char* str, const std::size_t len) {

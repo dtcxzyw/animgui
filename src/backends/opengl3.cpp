@@ -116,7 +116,6 @@ namespace animgui {
     };
 
     class render_backend_impl final : public render_backend {
-
         std::pmr::vector<command> m_command_list;
         animgui::cursor m_cursor;
         unsigned int m_program_id;
@@ -164,11 +163,6 @@ namespace animgui {
                     return GL_QUADS;
             }
             return 0;
-        }
-
-        template <typename T, typename U>
-        static constexpr void* offset(U T::*ptr) {
-            return &(reinterpret_cast<T*>(0)->*ptr);
         }
 
         static void emit(const native_callback& callback, const bounds& clip, vec2) {
@@ -241,6 +235,15 @@ namespace animgui {
 
             uint8_t data[4] = { 255, 255, 255, 255 };
             m_empty.update_texture(uvec2{ 0, 0 }, animgui::image_desc{ { 1, 1 }, channel::rgba, data });
+        }
+        explicit render_backend_impl(const render_backend_impl&) = delete;
+        explicit render_backend_impl(render_backend_impl&&) = delete;
+        render_backend_impl& operator=(const render_backend_impl&) = delete;
+        render_backend_impl& operator=(render_backend_impl&&) = delete;
+        ~render_backend_impl() override {
+            glDeleteProgram(m_program_id);
+            glDeleteVertexArrays(1, &m_vao);
+            glDeleteBuffers(1, &m_vbo);
         }
 
         void update_command_list(std::pmr::vector<command> command_list) override {
