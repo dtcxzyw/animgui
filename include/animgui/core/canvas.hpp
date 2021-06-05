@@ -2,6 +2,7 @@
 
 #pragma once
 #include "emitter.hpp"
+#include <optional>
 
 namespace animgui {
     enum class key_code : uint32_t;
@@ -18,8 +19,8 @@ namespace animgui {
         canvas& operator=(const canvas& rhs) = delete;
         canvas& operator=(canvas&& rhs) = default;
 
-        virtual std::pair<size_t, uid> push_region(uid uid, const bounds& bounds) = 0;
-        virtual void pop_region() = 0;
+        virtual std::pair<size_t, uid> push_region(uid uid, const std::optional<bounds>& reserved_bounds = std::nullopt) = 0;
+        virtual void pop_region(const std::optional<bounds>& new_bounds = std::nullopt) = 0;
         virtual std::pair<size_t, uid> add_primitive(uid uid, primitive primitive) = 0;
         virtual style& style() noexcept = 0;
         virtual void* raw_storage(size_t hash, uid uid) = 0;

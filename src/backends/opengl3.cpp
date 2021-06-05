@@ -44,7 +44,7 @@ namespace animgui {
 
         void main() {
             if(alpha==1)
-                out_frag_color = texture(tex, f_tex_coord).xxxw * f_color;
+                out_frag_color = texture(tex, f_tex_coord).xxxx * f_color;
             else
                 out_frag_color = texture(tex, f_tex_coord) * f_color;
         }
@@ -58,7 +58,7 @@ namespace animgui {
         bool m_own;
         GLenum m_format;
 
-        static GLenum get_format(const channel channel) {
+        static GLenum get_format(const channel channel) noexcept {
             if(channel == channel::alpha)
                 return GL_RED;
             if(channel == channel::rgb)
@@ -96,8 +96,10 @@ namespace animgui {
             if(image.channels != m_channel)
                 throw std::runtime_error{ "mismatched channel" };
             glBindTexture(GL_TEXTURE_2D, m_id);
+            glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
             glTexSubImage2D(GL_TEXTURE_2D, 0, offset.x, offset.y, image.size.x, image.size.y, m_format, GL_UNSIGNED_BYTE,
                             image.data);
+            glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
         }
 
         [[nodiscard]] uvec2 texture_size() const noexcept override {
@@ -179,6 +181,7 @@ namespace animgui {
             glDisable(GL_DEPTH_TEST);
             glDisable(GL_CULL_FACE);
             glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+            glBlendEquation(GL_FUNC_ADD);
 
             glUseProgram(m_program_id);
             glUniform2f(glGetUniformLocation(m_program_id, "size"), size.x, size.y);

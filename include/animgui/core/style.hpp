@@ -8,9 +8,7 @@ namespace animgui {
     class font;
 
     struct style {
-        std::shared_ptr<font> fallback_font;
-        uint32_t fallback_codepoint;
-        std::shared_ptr<font> default_font;
+        std::shared_ptr<font> font;
 
         color background_color;
         color normal_color;

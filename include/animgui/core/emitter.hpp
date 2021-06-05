@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 
 #pragma once
+#include "font_backend.hpp"
 #include "render_backend.hpp"
 #include <vector>
 
@@ -50,7 +51,7 @@ namespace animgui {
 
     struct extended_callback final {
         std::function<void(const bounds&, std::pmr::vector<command>&, const style&,
-                           const std::function<texture_region(font&, uint32_t)>&)>
+                           const std::function<texture_region(font&, glyph)>&)>
             emitter;
         vec2 bounds;
     };
@@ -74,7 +75,7 @@ namespace animgui {
         virtual ~emitter() = default;
 
         virtual std::pmr::vector<command> transform(vec2 size, span<operation> operations, const style& style,
-                                                    const std::function<texture_region(font&, uint32_t)>& font_callback) = 0;
+                                                    const std::function<texture_region(font&, glyph)>& font_callback) = 0;
         virtual vec2 calculate_bounds(const primitive& primitive, const style& style) = 0;
     };
 }  // namespace animgui

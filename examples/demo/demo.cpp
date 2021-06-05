@@ -15,25 +15,30 @@
 #include <animgui/core/style.hpp>
 #include <iostream>
 
-void fail(const std::string& str) {
+[[noreturn]] void fail(const std::string& str) {
     std::cout << str << std::endl;
     std::terminate();
 }
 
 void render(animgui::canvas& canvas) {
     animgui::layout_row(canvas, animgui::row_alignment::left, [](animgui::row_layout_canvas& layout) {
-        animgui::text(layout, "Hello World");
+        animgui::text(layout, "Hello World 你好 世界");
+        layout.newline();
+        static uint32_t count = 0;
+        animgui::text(layout, "Click: " + std::pmr::string{ std::to_string(count) });
+        if(animgui::button_label(layout, "Add")) {
+            ++count;
+        }
         layout.newline();
         if(animgui::button_label(layout, "Exit")) {
             std::exit(0);
         }
-        animgui::text(layout, "test1");
-        animgui::text(layout, "text2");
     });
 }
 
 // refer to https://learnopengl.com/In-Practice/Debugging
-void glDebugOutput(GLenum source, GLenum type, unsigned int id, GLenum severity, GLsizei, const char* message, const void*) {
+void glDebugOutput(const GLenum source, const GLenum type, const unsigned int id, const GLenum severity, GLsizei,
+                   const char* message, const void*) {
     // ignore non-significant error/warning codes
     if(id == 131169 || id == 131185 || id == 131218 || id == 131204)
         return;
@@ -149,12 +154,12 @@ int main() {
         const auto glfw3_backend = animgui::create_glfw3_backend(window);
         const auto ogl3_backend = animgui::create_opengl3_backend();
         const auto stb_font_backend = animgui::create_stb_font_backend();
-        const auto font = stb_font_backend->load_font("times", 18.0f);
+        const auto font = stb_font_backend->load_font("msyh", 100.0f);
         const auto animator = animgui::create_dummy_animator();
         const auto emitter = animgui::create_builtin_emitter(memory_resource);
         auto ctx = animgui::create_animgui_context(*glfw3_backend, *ogl3_backend, *emitter, *animator, memory_resource);
         auto&& style = ctx->style();
-        style.default_font = style.fallback_font = font;
+        style.font = font;
 
         glfwSwapInterval(0);
 
@@ -171,6 +176,7 @@ int main() {
             ctx->new_frame(w, h, delta_t, render);
 
             glViewport(0, 0, w, h);
+            glScissor(0, 0, w, h);
             glClearColor(0, 0, 0, 1);
             glClear(GL_COLOR_BUFFER_BIT);
             ogl3_backend->emit(animgui::uvec2{ static_cast<uint32_t>(w), static_cast<uint32_t>(h) });

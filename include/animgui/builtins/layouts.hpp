@@ -19,9 +19,9 @@ namespace animgui {
         [[nodiscard]] bool region_hovered() const override;
         [[nodiscard]] bool region_pressed(key_code key) const override;
         void register_type(size_t hash, size_t size, size_t alignment, raw_callback ctor, raw_callback dtor) final;
-        void pop_region() override;
+        void pop_region(const std::optional<bounds>& new_bounds) override;
         [[nodiscard]] bool pressed(key_code key, const bounds& bounds) const override;
-        std::pair<size_t, uid> push_region(uid uid, const bounds& bounds) override;
+        std::pair<size_t, uid> push_region(uid uid, const std::optional<bounds>& reserved_bounds) override;
         std::pair<size_t, uid> add_primitive(uid uid, primitive primitive) override;
         void set_cursor(cursor cursor) final;
         float step(uid id, float dest) final;

@@ -41,13 +41,13 @@ namespace animgui {
     };
     inline void merge_bounds(bounds& sub, const bounds& parent) {
         sub.left += parent.left;
-        sub.right += parent.right;
+        sub.right += parent.left;
         sub.top += parent.top;
         sub.bottom += parent.top;
     }
     inline bool clip_bounds(bounds& sub, const bounds& parent) {
         sub.left += parent.left;
-        sub.right += parent.right;
+        sub.right += parent.left;
         sub.top += parent.top;
         sub.bottom += parent.top;
         sub.right = std::min(sub.right, parent.right);

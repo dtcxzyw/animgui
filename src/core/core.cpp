@@ -128,9 +128,7 @@ namespace animgui {
             m_animation_state_hash = hash;
             m_state_manager.register_type(
                 hash, state_size, alignment, [](void*, size_t) {}, [](void*, size_t) {});
-            m_region_stack.push(std::make_tuple(
-                std::numeric_limits<size_t>::max(), uid{ 0 },
-                std::minstd_rand{ static_cast<uint32_t>(std::chrono::high_resolution_clock::now().time_since_epoch().count()) }));
+            m_region_stack.push(std::make_tuple(std::numeric_limits<size_t>::max(), uid{ 0 }, std::minstd_rand{}));  // NOLINT(cert-msc51-cpp)
         }
         animgui::style& style() noexcept override {
             return m_context.style();
@@ -148,18 +146,21 @@ namespace animgui {
                            const raw_callback dtor) override {
             m_state_manager.register_type(hash, size, alignment, ctor, dtor);
         }
-        void pop_region() override {
+        void pop_region(const std::optional<bounds>& bounds) override {
             m_commands.push_back(animgui::pop_region{});
             const auto [idx, uid, _] = m_region_stack.top();
             m_region_stack.pop();
-            storage<bounds>(mix(uid, "last_bounds"_id)) = std::get<animgui::push_region>(m_commands[idx]).bounds;
+            auto&& current_bounds = std::get<animgui::push_region>(m_commands[idx]).bounds;
+            if(bounds.has_value())
+                current_bounds = bounds.value();
+            storage<animgui::bounds>(mix(uid, "last_bounds"_id)) = current_bounds;
         }
         [[nodiscard]] uid current_region_uid() const {
             return std::get<uid>(m_region_stack.top());
         }
-        std::pair<size_t, uid> push_region(const uid uid, const bounds& bounds) override {
+        std::pair<size_t, uid> push_region(const uid uid, const std::optional<bounds>& bounds) override {
             const auto idx = m_commands.size();
-            m_commands.push_back(animgui::push_region{ bounds });
+            m_commands.push_back(animgui::push_region{ bounds.value_or(animgui::bounds{ 0.0f, 0.0f, 0.0f, 0.0f }) });
             const auto mixed = mix(current_region_uid(), uid);
             m_region_stack.emplace(idx, mixed, std::minstd_rand{ static_cast<unsigned>(mixed.id) });
             return { idx, mixed };
@@ -212,7 +213,7 @@ namespace animgui {
 
     class command_optimizer final {
     public:
-        [[nodiscard]] std::pmr::vector<command> optimize(const std::pmr::vector<command>& src) const {
+        [[nodiscard]] std::pmr::vector<command> optimize(std::pmr::vector<command> src) const {
             // noop
             // TODO: merge draw calls
             return src;
@@ -322,7 +323,7 @@ namespace animgui {
             if(std::max(image.size.x, image.size.y) >= image_pool_size) {
                 auto tex = m_backend.create_texture(image.size, image.channels);
                 tex->update_texture(uvec2{ 0, 0 }, image);
-                return { tex, bounds{ 0.0f, 1.0f, 0.0f, 1.0f } };
+                return { std::move(tex), bounds{ 0.0f, 1.0f, 0.0f, 1.0f } };
             }
             auto& images = m_images[static_cast<uint32_t>(image.channels)];
             for(auto&& pool : images) {
@@ -355,16 +356,15 @@ namespace animgui {
         void reset() {
             m_lut.clear();
         }
-        texture_region locate(font& font, const uint32_t codepoint) {
+        texture_region locate(font& font, const glyph glyph) {
             auto&& lut = locate(font);
-            const auto iter = lut.find(codepoint);
+            const auto iter = lut.find(glyph.idx);
             if(iter == lut.cend()) {
-                const auto height = static_cast<uint32_t>(ceil(font.height()));
-                const auto width = static_cast<uint32_t>(ceil(font.calculate_width(codepoint)));
-                std::pmr::vector<std::byte> buffer{ width * height, m_lut.get_allocator().resource() };
-                const image_desc image{ { width, height }, channel::alpha, buffer.data() };
-                font.render_to_bitmap(codepoint, image);
-                return lut.emplace(codepoint, m_image_compactor.compact(image)).first->second;
+                return lut
+                    .emplace(
+                        glyph.idx,
+                        font.render_to_bitmap(glyph, [&](const image_desc& desc) { return m_image_compactor.compact(desc); }))
+                    .first->second;
             }
             return iter->second;
         }
@@ -388,7 +388,7 @@ namespace animgui {
             : m_input_backend{ input_backend }, m_render_backend{ render_backend }, m_emitter{ emitter }, m_animator{ animator },
               m_state_manager{ memory_resource }, m_image_compactor{ render_backend, memory_resource },
               m_codepoint_locator{ m_image_compactor, memory_resource }, m_memory_resource{ memory_resource }, m_style{
-                  nullptr, '?', nullptr, {}, {}, {}, {}, {}, {}, {}, 0.0f
+                  nullptr, {}, {}, {}, {}, {}, {}, {}, 0.0f
               } {
             set_classic_style(*this);
         }
@@ -408,12 +408,11 @@ namespace animgui {
                                 delta_t,         m_emitter,
                                 m_state_manager, &arena };
             render_function(canvas);
-            const auto commands = m_emitter.transform(canvas.reserved_size(), canvas.commands(), m_style,
-                                                      [&](font& font, const uint32_t codepoint) -> texture_region {
-                                                          return m_codepoint_locator.locate(font, codepoint);
-                                                      });
-            const auto optimized_commands = m_command_optimizer.optimize(commands);
-            m_render_backend.update_command_list(optimized_commands);
+            auto commands = m_emitter.transform(
+                canvas.reserved_size(), canvas.commands(), m_style,
+                [&](font& font, const glyph glyph) -> texture_region { return m_codepoint_locator.locate(font, glyph); });
+            auto optimized_commands = m_command_optimizer.optimize(std::move(commands));
+            m_render_backend.update_command_list(std::move(optimized_commands));
             m_render_backend.set_cursor(canvas.cursor());
         }
         texture_region load_image(const image_desc& image) override {

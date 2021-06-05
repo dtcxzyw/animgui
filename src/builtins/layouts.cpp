@@ -26,11 +26,11 @@ namespace animgui {
                                      const raw_callback dtor) {
         m_parent.register_type(hash, size, alignment, ctor, dtor);
     }
-    void layout_proxy::pop_region() {
-        m_parent.pop_region();
+    void layout_proxy::pop_region(const std::optional<bounds>& new_bounds) {
+        m_parent.pop_region(new_bounds);
     }
-    std::pair<size_t, uid> layout_proxy::push_region(const uid uid, const bounds& bounds) {
-        const auto [idx, id] = m_parent.push_region(uid, bounds);
+    std::pair<size_t, uid> layout_proxy::push_region(const uid uid, const std::optional<bounds>& reserved_bounds) {
+        const auto [idx, id] = m_parent.push_region(uid, reserved_bounds);
         return { idx - m_offset, id };
     }
     bool layout_proxy::pressed(const key_code key, const bounds& bounds) const {
@@ -82,7 +82,7 @@ namespace animgui {
             }
             const auto width = reserved_size().x;
             if(!m_current_line.empty()) {
-                const auto total_width = width_sum + (static_cast<float>(m_current_line.size()) - 1) * style().spacing.x;
+                const auto total_width = width_sum + static_cast<float>(m_current_line.size()) * style().spacing.x;
                 m_max_total_width = std::fmaxf(m_max_total_width, total_width);
                 auto alignment = m_alignment;
                 if(alignment == row_alignment::justify && (m_current_line.size() == 1 || total_width > width))
@@ -92,15 +92,17 @@ namespace animgui {
 
                 switch(alignment) {
                     case row_alignment::left:
+                        offset = spacing;
                         break;
                     case row_alignment::right: {
-                        offset = width - total_width;
+                        offset = width - total_width - spacing;
                     } break;
                     case row_alignment::middle: {
                         offset = (width - total_width) / 2.0f;
                     } break;
                     case row_alignment::justify: {
-                        spacing = (width - width_sum) / (static_cast<float>(m_current_line.size()) - 1);
+                        spacing = (width - width_sum) / (static_cast<float>(m_current_line.size()) + 1);
+                        offset = spacing;
                         m_max_total_width = std::fmaxf(m_max_total_width, width);
                     } break;
                 }
@@ -121,15 +123,15 @@ namespace animgui {
     public:
         row_layout_canvas_impl(canvas& parent, const row_alignment alignment)
             : row_layout_canvas{ parent }, m_alignment{ alignment }, m_current_line{ parent.memory_resource() } {}
-        std::pair<size_t, uid> push_region(const uid uid, const bounds& bounds) override {
-            const auto [idx, id] = layout_proxy::push_region(uid, bounds);
+        std::pair<size_t, uid> push_region(const uid uid, const std::optional<bounds>& reserved_bounds) override {
+            const auto [idx, id] = layout_proxy::push_region(uid, reserved_bounds);
             if(++m_current_depth == 1) {
                 m_current_line.emplace_back(id, idx, vec2{});
             }
             return { idx, id };
         }
-        void pop_region() override {
-            m_parent.pop_region();
+        void pop_region(const std::optional<bounds>& new_bounds) override {
+            m_parent.pop_region(new_bounds);
             if(--m_current_depth == 0) {
                 const auto [x1, x2, y1, y2] = storage<bounds>(mix(std::get<uid>(m_current_line.back()), "last_bounds"_id));
                 std::get<vec2>(m_current_line.back()) = { x2 - x1, y2 - y1 };

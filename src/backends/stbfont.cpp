@@ -13,15 +13,15 @@
 namespace fs = std::filesystem;
 
 namespace animgui {
-    // TODO: handle character advance/positioning
     class font_impl final : public font {
         std::pmr::vector<uint8_t> m_font_data;
         stbtt_fontinfo m_font_info;
-        float m_height, m_scale;
+        float m_height, m_scale, m_line_spacing, m_baseline;
 
     public:
         font_impl(const fs::path& path, const float height, std::pmr::memory_resource* memory_resource)
-            : m_font_data{ fs::file_size(path), memory_resource }, m_font_info{}, m_height{ height }, m_scale{ 0.0f } {
+            : m_font_data{ fs::file_size(path), memory_resource }, m_font_info{}, m_height{ height }, m_scale{ 0.0f },
+              m_line_spacing{ 0.0f } {
             {
                 std::ifstream in{ path, std::ios::in | std::ios::binary };
                 in.read(reinterpret_cast<char*>(m_font_data.data()), m_font_data.size());
@@ -29,21 +29,45 @@ namespace animgui {
             }
             stbtt_InitFont(&m_font_info, m_font_data.data(), stbtt_GetFontOffsetForIndex(m_font_data.data(), 0));
             m_scale = stbtt_ScaleForPixelHeight(&m_font_info, height);
+            int ascent, descent, line_gap_val;
+            stbtt_GetFontVMetrics(&m_font_info, &ascent, &descent, &line_gap_val);
+            m_line_spacing = static_cast<float>(ascent - descent + line_gap_val) * m_scale;
+            m_baseline = static_cast<float>(ascent) * m_scale;
         }
         [[nodiscard]] float height() const noexcept override {
             return m_height;
         }
-        void render_to_bitmap(const uint32_t codepoint, const image_desc& dest) const override {
-            stbtt_MakeCodepointBitmap(&m_font_info, const_cast<uint8_t*>(static_cast<const uint8_t*>(dest.data)), dest.size.x,
-                                      dest.size.y, dest.size.x, m_scale, m_scale, codepoint);
-        }
-        [[nodiscard]] float calculate_width(const uint32_t codepoint) const override {
+        texture_region render_to_bitmap(const glyph glyph,
+                                        const std::function<texture_region(const image_desc&)>& image_uploader) const override {
             int x0, y0, x1, y1;
-            stbtt_GetCodepointBitmapBox(&m_font_info, codepoint, m_scale, m_scale, &x0, &y0, &x1, &y1);
-            return static_cast<float>(x1 - x0);
+            stbtt_GetGlyphBitmapBox(&m_font_info, glyph.idx, m_scale, m_scale, &x0, &y0, &x1, &y1);
+            const uint32_t w = x1 - x0;
+            const uint32_t h = y1 - y0;
+            std::pmr::vector<uint8_t> buffer{ w * h, m_font_data.get_allocator().resource() };
+            const image_desc image{ { w, h }, channel::alpha, buffer.data() };
+            stbtt_MakeGlyphBitmap(&m_font_info, const_cast<uint8_t*>(static_cast<const uint8_t*>(buffer.data())), w, h, w,
+                                  m_scale, m_scale, glyph.idx);
+            return image_uploader(image);
         }
-        [[nodiscard]] bool exists(const uint32_t codepoint) const override {
-            return stbtt_FindGlyphIndex(&m_font_info, codepoint);
+        [[nodiscard]] float calculate_advance(const glyph glyph, const animgui::glyph prev) const override {
+            int advance_width, left_side_bearing;
+            stbtt_GetGlyphHMetrics(&m_font_info, glyph.idx, &advance_width, &left_side_bearing);
+            const auto base = static_cast<float>(advance_width) * m_scale;
+            if(prev.idx == 0)
+                return base;
+            return base + static_cast<float>(stbtt_GetGlyphKernAdvance(&m_font_info, prev.idx, glyph.idx)) * m_scale;
+        }
+        [[nodiscard]] float line_spacing() const noexcept override {
+            return m_line_spacing;
+        }
+        [[nodiscard]] glyph to_glyph(const uint32_t codepoint) const override {
+            return glyph{ static_cast<uint32_t>(stbtt_FindGlyphIndex(&m_font_info, codepoint)) };
+        }
+        [[nodiscard]] bounds calculate_bounds(const glyph glyph) const override {
+            int x0, y0, x1, y1;
+            stbtt_GetGlyphBox(&m_font_info, glyph.idx, &x0, &y0, &x1, &y1);
+            return bounds{ static_cast<float>(x0) * m_scale, static_cast<float>(x1) * m_scale,
+                           static_cast<float>(-y1) * m_scale + m_baseline, static_cast<float>(-y0) * m_scale + m_baseline };
         }
     };
     class stb_font_backend final : public font_backend {
