@@ -85,7 +85,8 @@ namespace animgui {
                 const auto total_width = width_sum + static_cast<float>(m_current_line.size()) * style().spacing.x;
                 m_max_total_width = std::fmaxf(m_max_total_width, total_width);
                 auto alignment = m_alignment;
-                if(alignment == row_alignment::justify && (m_current_line.size() == 1 || total_width > width))
+                if(alignment == row_alignment::justify &&
+                   (m_current_line.size() == 1 || width < width_sum + 2.0f * style().spacing.x))
                     alignment = row_alignment::middle;
                 auto offset = 0.0f;
                 auto spacing = style().spacing.x;
@@ -101,8 +102,9 @@ namespace animgui {
                         offset = (width - total_width) / 2.0f;
                     } break;
                     case row_alignment::justify: {
-                        spacing = (width - width_sum) / (static_cast<float>(m_current_line.size()) + 1);
-                        offset = spacing;
+                        spacing =
+                            (width - width_sum - 2.0f * style().spacing.x) / (static_cast<float>(m_current_line.size()) - 1);
+                        offset = style().spacing.x;
                         m_max_total_width = std::fmaxf(m_max_total_width, width);
                     } break;
                 }
