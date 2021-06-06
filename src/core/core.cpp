@@ -7,6 +7,7 @@
 #include <animgui/core/font_backend.hpp>
 #include <animgui/core/input_backend.hpp>
 #include <animgui/core/style.hpp>
+#include <cassert>
 #include <list>
 #include <optional>
 #include <random>
@@ -221,7 +222,7 @@ namespace animgui {
         }
     };
 
-    static constexpr uint32_t image_pool_size = 1024;
+    static constexpr uint32_t image_pool_size = 1026;
 
     class compacted_image final {
         static constexpr uint32_t margin = 1;
@@ -230,17 +231,39 @@ namespace animgui {
         std::pmr::memory_resource* m_memory_resource;
 
         struct tree_node final {
+            int id;
             uvec2 size;
             uvec2 pos;
-            std::pmr::vector<std::shared_ptr<tree_node>> children;
-            tree_node* parent;
+            std::pmr::vector<int> children;
+            int parent;
             explicit tree_node(std::pmr::memory_resource* memory_resource)
-                : size{}, pos{}, children{ memory_resource }, parent(nullptr) {}
+                : id{ -1 }, size{}, pos{}, children{ memory_resource }, parent{ -1 } {}
         };
 
-        uint32_t m_tex_w, m_tex_h;
-        std::pmr::list<tree_node*> m_list;
-        std::shared_ptr<tree_node> m_tree_root;
+        struct root_info final {
+            uint32_t right{ 0 };
+            std::pmr::vector<tree_node> nodes;
+        };
+
+        uint32_t m_tex_w{ image_pool_size }, m_tex_h{ image_pool_size };
+        std::pmr::vector<root_info> m_columns;
+
+        void create_new_column(uint32_t start) {
+            root_info column;
+            column.right = m_tex_w;
+
+            tree_node root(m_memory_resource);
+            root.id = static_cast<int>(column.nodes.size());
+            root.size.x = 0;
+            root.size.y = m_tex_h;
+            root.pos.x = start;
+            root.pos.y = 0;
+
+            column.nodes.push_back(root);
+            if(!m_columns.empty())
+                m_columns.back().right = start;
+            m_columns.push_back(column);
+        }
 
         [[nodiscard]] bounds update_texture(uvec2 offset, const image_desc& image) const {
             offset.x += margin;
@@ -254,47 +277,64 @@ namespace animgui {
     public:
         explicit compacted_image(std::shared_ptr<texture> texture, std::pmr::memory_resource* memory_resource)
             : m_texture{ std::move(texture) }, m_memory_resource{ memory_resource } {
-            m_tex_w = image_pool_size;
-            m_tex_h = image_pool_size;
-
-            m_tree_root = std::make_shared<tree_node>(memory_resource);
-            m_tree_root->size.x = 0;
-            m_tree_root->size.y = m_tex_h;
-            m_tree_root->pos.x = m_tree_root->pos.y = 0;
-
-            m_list.push_back(m_tree_root.get());
+            create_new_column(0);
         }
         [[nodiscard]] std::shared_ptr<texture> texture() const {
             return m_texture;
         }
         std::optional<bounds> allocate(const image_desc& image) {
-            const auto node = std::make_shared<tree_node>(m_memory_resource);
-            node->size.x = image.size.x + margin * 2;
-            node->size.y = image.size.y + margin * 2;
-
-            for(auto it = m_list.begin(); it != m_list.end(); ++it) {
-                if((*it)->size.y >= node->size.y && (*it)->pos.x + (*it)->size.x + node->size.x <= m_tex_w) {
-                    (*it)->children.push_back(node);
-                    node->parent = (*it);
-                    node->pos.x = (*it)->pos.x + (*it)->size.x;
-                    node->pos.y = (*it)->pos.y;
-                    (*it) = node.get();
-                    return update_texture(node->pos, image);
-                }
-                if((*it) != m_tree_root.get()) {
-                    if(auto&& parent = (*it)->parent; parent->children.back().get() == (*it)) {
-                        if(parent->pos.y + parent->size.y - ((*it)->pos.y + (*it)->size.y) >= node->size.y &&
-                           parent->pos.x + parent->size.x + node->size.x <= m_tex_w) {
-                            parent->children.push_back(node);
-                            node->parent = parent;
-                            node->pos.x = parent->pos.x + parent->size.x;
-                            node->pos.y = (*it)->pos.y + (*it)->size.y;
-                            m_list.insert(std::next(it), node.get());
-                            return update_texture(node->pos, image);
+            // Create a new node.
+            tree_node new_node(m_memory_resource);
+            new_node.size.x = image.size.x + margin * 2;
+            new_node.size.y = image.size.y + margin * 2;
+            // The image should be smaller than the size of texture.
+            assert(new_node.size.x <= m_tex_w && new_node.size.y <= m_tex_h);
+            // Find a place in existing columns.
+            for(auto&& column : m_columns) {
+                for(auto&& parent : column.nodes) {
+                    if(parent.children.empty()) {
+                        if(parent.size.y >= new_node.size.y &&
+                           parent.pos.x + parent.size.x + new_node.size.x <= column.right) {
+                            new_node.parent = parent.id;
+                            new_node.pos.x = parent.pos.x + parent.size.x;
+                            new_node.pos.y = parent.pos.y;
+                            new_node.id = static_cast<int>(column.nodes.size());
+                            parent.children.push_back(new_node.id);
+                            column.nodes.push_back(new_node);
+                            return update_texture(new_node.pos, image);
+                        }
+                    } else {
+                        if(tree_node& side = column.nodes[parent.children.back()];
+                           side.pos.y + side.size.y + new_node.size.y <= parent.pos.y + parent.size.y &&
+                           parent.pos.x + parent.size.x + new_node.size.y <= column.right) {
+                            new_node.parent = parent.id;
+                            new_node.pos.x = parent.pos.x + parent.size.x;
+                            new_node.pos.y = side.pos.y + side.size.y;
+                            new_node.id = static_cast<int>(column.nodes.size());
+                            parent.children.push_back(new_node.id);
+                            column.nodes.push_back(new_node);
+                            return update_texture(new_node.pos, image);
                         }
                     }
                 }
             }
+            // Create a new column.
+            uint32_t right = 0;
+            auto&& column = m_columns.back();
+            for(auto&& node : column.nodes)
+                right = std::max(right, node.pos.x + node.size.x);
+            if(m_tex_w - right >= new_node.size.x) {
+                create_new_column(right);
+                auto&& new_column = m_columns.back();
+                new_node.parent = 0;
+                new_node.pos.x = right;
+                new_node.pos.y = 0;
+                new_node.id = 1;
+                new_column.nodes[0].children.push_back(1);
+                new_column.nodes.push_back(new_node);
+                return update_texture(new_node.pos, image);
+            }
+            // Allocation failed.
             return std::nullopt;
         }
     };
