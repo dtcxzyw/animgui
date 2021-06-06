@@ -40,7 +40,24 @@ namespace animgui {
 
     using native_callback = std::function<void(const bounds&)>;
 
-    enum class primitive_type : uint32_t { points, lines, line_strip, line_loop, triangles, triangle_fan, triangle_strip, quads };
+    enum class primitive_type : uint32_t {
+        points = 1 << 0,
+        lines = 1 << 1,
+        line_strip = 1 << 2,
+        line_loop = 1 << 3,
+        triangles = 1 << 4,
+        triangle_fan = 1 << 5,
+        triangle_strip = 1 << 6,
+        quads = 1 << 7
+    };
+
+    constexpr primitive_type operator|(const primitive_type lhs, const primitive_type rhs) {
+        return static_cast<primitive_type>(static_cast<uint32_t>(lhs) | static_cast<uint32_t>(rhs));
+    }
+
+    constexpr bool support_primitive(const primitive_type capability, const primitive_type requirement) {
+        return static_cast<uint32_t>(capability) & static_cast<uint32_t>(requirement);
+    }
 
     struct vertex final {
         vec2 pos;
@@ -80,5 +97,6 @@ namespace animgui {
         virtual std::shared_ptr<texture> create_texture(uvec2 size, channel channels) = 0;
         virtual std::shared_ptr<texture> create_texture_from_native_handle(uint64_t handle, uvec2 size, channel channels) = 0;
         virtual void emit(uvec2 screen_size) = 0;
+        [[nodiscard]] virtual primitive_type supported_primitives() const noexcept = 0;
     };
 }  // namespace animgui

@@ -369,6 +369,9 @@ namespace animgui {
         std::shared_ptr<texture> create_texture_from_native_handle(const uint64_t handle, uvec2 size, channel channels) override {
             return std::make_shared<texture_impl>(reinterpret_cast<ID3D11Texture2D*>(handle), m_device_context, channels, size);
         }
+        [[nodiscard]] primitive_type supported_primitives() const noexcept override {
+            return primitive_type::triangle_strip | primitive_type::triangles;
+        }
     };
     ANIMGUI_API std::shared_ptr<render_backend> create_d3d11_backend(ID3D11Device* device, ID3D11DeviceContext* device_context) {
         return std::make_shared<d3d11_backend>(device, device_context);

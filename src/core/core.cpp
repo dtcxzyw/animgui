@@ -293,8 +293,7 @@ namespace animgui {
             for(auto&& column : m_columns) {
                 for(auto&& parent : column.nodes) {
                     if(parent.children.empty()) {
-                        if(parent.size.y >= new_node.size.y &&
-                           parent.pos.x + parent.size.x + new_node.size.x <= column.right) {
+                        if(parent.size.y >= new_node.size.y && parent.pos.x + parent.size.x + new_node.size.x <= column.right) {
                             new_node.parent = parent.id;
                             new_node.pos.x = parent.pos.x + parent.size.x;
                             new_node.pos.y = parent.pos.y;
@@ -410,6 +409,153 @@ namespace animgui {
             return iter->second;
         }
     };
+
+    class command_fallback_translator final {
+        primitive_type m_supported_primitive;
+        primitive_type m_fallback_primitive;
+        void (*m_quad_emitter)(std::pmr::vector<vertex>&, const vertex&, const vertex&, const vertex&, const vertex&);
+
+        // CCW
+        static void emit_triangle(std::pmr::vector<vertex>& vertices, const vertex& p1, const vertex& p2, const vertex& p3) {
+            vertices.push_back(p1);
+            vertices.push_back(p2);
+            vertices.push_back(p3);
+        }
+        static void emit_quad_triangle_strip(std::pmr::vector<vertex>& vertices, const vertex& p1, const vertex& p2,
+                                             const vertex& p3, const vertex& p4) {
+            vertices.push_back(p1);
+            vertices.push_back(p2);
+            vertices.push_back(p4);
+            vertices.push_back(p3);
+        }
+        static void emit_quad_triangles(std::pmr::vector<vertex>& vertices, const vertex& p1, const vertex& p2, const vertex& p3,
+                                        const vertex& p4) {
+            vertices.push_back(p1);
+            vertices.push_back(p2);
+            vertices.push_back(p3);
+            vertices.push_back(p1);
+            vertices.push_back(p3);
+            vertices.push_back(p4);
+        }
+        void emit_line(std::pmr::vector<vertex>& vertices, const vertex& p1, const vertex& p2, const float width) const {
+            auto dx = p1.pos.x - p2.pos.x, dy = p1.pos.y - p2.pos.y;
+            const auto dist = std::hypotf(dx, dy);
+            if(dist < 0.1f)
+                return;
+            const auto scale = 0.5f * width / dist;
+            dx *= scale;
+            dy *= -scale;
+            std::swap(dx, dy);
+            vertex p11 = p1, p12 = p1, p21 = p2, p22 = p2;
+            p11.pos.x += dx;
+            p11.pos.y += dy;
+            p12.pos.x -= dx;
+            p12.pos.y -= dy;
+            p21.pos.x += dx;
+            p21.pos.y += dy;
+            p22.pos.x -= dx;
+            p22.pos.y -= dy;
+            m_quad_emitter(vertices, p11, p21, p22, p12);
+        }
+
+        void fallback_lines_adj(const std::pmr::vector<vertex>& input, std::pmr::vector<vertex>& output, const float line_width,
+                                const bool make_loop) const {
+            for(size_t i = 1; i < input.size(); ++i)
+                emit_line(output, input[i - 1], input[i], line_width);
+            if(make_loop)
+                emit_line(output, input.back(), input.front(), line_width);
+        }
+        void fallback_lines(const std::pmr::vector<vertex>& input, std::pmr::vector<vertex>& output,
+                            const float line_width) const {
+            for(size_t i = 1; i < input.size(); i += 2)
+                emit_line(output, input[i - 1], input[i], line_width);
+        }
+        void fallback_points(const std::pmr::vector<vertex>& input, std::pmr::vector<vertex>& output,
+                             const float point_size) const {
+            const auto offset = point_size * 0.5f;
+            for(auto&& p0 : input) {
+                vertex p1 = p0, p2 = p0, p3 = p0, p4 = p0;
+                p1.pos.x -= offset;
+                p1.pos.y -= offset;
+                p2.pos.x -= offset;
+                p2.pos.y += offset;
+                p3.pos.x += offset;
+                p3.pos.y += offset;
+                p4.pos.x += offset;
+                p4.pos.y -= offset;
+                m_quad_emitter(output, p1, p2, p3, p4);
+            }
+        }
+        void fallback_quads(const std::pmr::vector<vertex>& input, std::pmr::vector<vertex>& output) const {
+            for(size_t base = 0; base < input.size(); base += 4)
+                m_quad_emitter(output, input[base], input[base + 1], input[base + 2], input[base + 3]);
+        }
+
+        static void fallback_triangle_strip(const std::pmr::vector<vertex>& input, std::pmr::vector<vertex>& output) {
+            for(size_t i = 2; i < input.size(); ++i) {
+                if(i & 1)
+                    emit_triangle(output, input[i], input[i - 1], input[i - 2]);
+                else
+                    emit_triangle(output, input[i], input[i - 2], input[i - 1]);
+            }
+        }
+
+        static void fallback_triangle_fan(const std::pmr::vector<vertex>& input, std::pmr::vector<vertex>& output) {
+            for(size_t i = 2; i < input.size(); ++i)
+                emit_triangle(output, input[0], input[i - 1], input[i]);
+        }
+
+    public:
+        explicit command_fallback_translator(const primitive_type supported_primitive)
+            : m_supported_primitive{ supported_primitive },
+              m_fallback_primitive{ support_primitive(supported_primitive, primitive_type::triangle_strip) ?
+                                        primitive_type::triangle_strip :
+                                        primitive_type::triangles },
+              m_quad_emitter{ support_primitive(supported_primitive, primitive_type::triangle_strip) ? emit_quad_triangle_strip :
+                                                                                                       emit_quad_triangles } {
+            if(!support_primitive(m_supported_primitive, primitive_type::triangles))
+                throw std::logic_error{ "Unsupported render backend" };
+        }
+
+        void transform(std::pmr::vector<command>& command_list) const {
+            for(auto& [_, desc] : command_list)
+                if(desc.index() == 1) {
+                    // ReSharper disable once CppTooWideScope
+                    auto&& [type, vertices, _, point_line_size] = std::get<animgui::primitives>(desc);
+                    if(!support_primitive(m_supported_primitive, type)) {
+                        std::pmr::vector<vertex> output{ vertices.get_allocator().resource() };
+                        output.reserve(vertices.size() * 3);
+                        // ReSharper disable once CppDefaultCaseNotHandledInSwitchStatement CppIncompleteSwitchStatement
+                        switch(type) {  // NOLINT(clang-diagnostic-switch)
+                            case primitive_type::points:
+                                fallback_points(vertices, output, point_line_size);
+                                break;
+                            case primitive_type::lines:
+                                fallback_lines(vertices, output, point_line_size);
+                                break;
+                            case primitive_type::line_strip:
+                                fallback_lines_adj(vertices, output, point_line_size, false);
+                                break;
+                            case primitive_type::line_loop:
+                                fallback_lines_adj(vertices, output, point_line_size, true);
+                                break;
+                            case primitive_type::triangle_fan:
+                                fallback_triangle_fan(vertices, output);
+                                break;
+                            case primitive_type::triangle_strip:
+                                fallback_triangle_strip(vertices, output);
+                                break;
+                            case primitive_type::quads:
+                                fallback_quads(vertices, output);
+                                break;
+                        }
+                        type = m_fallback_primitive;
+                        vertices = std::move(output);
+                    }
+                }
+        }
+    };
+
     class context_impl final : public context {
         input_backend& m_input_backend;
         render_backend& m_render_backend;
@@ -420,6 +566,7 @@ namespace animgui {
         image_compactor m_image_compactor;
         codepoint_locator m_codepoint_locator;
         command_optimizer m_command_optimizer;
+        command_fallback_translator m_command_fallback_translator;
         std::pmr::memory_resource* m_memory_resource;
         animgui::style m_style;
 
@@ -428,9 +575,9 @@ namespace animgui {
                      std::pmr::memory_resource* memory_resource)
             : m_input_backend{ input_backend }, m_render_backend{ render_backend }, m_emitter{ emitter }, m_animator{ animator },
               m_state_manager{ memory_resource }, m_image_compactor{ render_backend, memory_resource },
-              m_codepoint_locator{ m_image_compactor, memory_resource }, m_memory_resource{ memory_resource }, m_style{
-                  nullptr, {}, {}, {}, {}, {}, {}, {}, 0.0f
-              } {
+              m_codepoint_locator{ m_image_compactor, memory_resource },
+              m_command_fallback_translator{ render_backend.supported_primitives() },
+              m_memory_resource{ memory_resource }, m_style{ nullptr, {}, {}, {}, {}, {}, {}, {}, 0.0f } {
             set_classic_style(*this);
         }
         void reset_cache() override {
@@ -453,6 +600,8 @@ namespace animgui {
                 canvas.reserved_size(), canvas.commands(), m_style,
                 [&](font& font, const glyph glyph) -> texture_region { return m_codepoint_locator.locate(font, glyph); });
             auto optimized_commands = m_command_optimizer.optimize(std::move(commands));
+            m_command_fallback_translator.transform(optimized_commands);
+            // TODO: optimize again?
             m_render_backend.update_command_list(std::move(optimized_commands));
             m_render_backend.set_cursor(canvas.cursor());
         }

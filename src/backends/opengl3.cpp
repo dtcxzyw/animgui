@@ -286,6 +286,10 @@ namespace animgui {
                     command.desc);
             }
         }
+        [[nodiscard]] primitive_type supported_primitives() const noexcept override {
+            return primitive_type::line_loop | primitive_type::lines | primitive_type::line_strip | primitive_type::points |
+                primitive_type::quads | primitive_type::triangle_fan | primitive_type::triangle_strip | primitive_type::triangles;
+        }
     };
 
     ANIMGUI_API std::shared_ptr<render_backend> create_opengl3_backend() {
