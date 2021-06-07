@@ -397,6 +397,7 @@ namespace animgui {
     class context_impl final : public context {
         input_backend& m_input_backend;
         render_backend& m_render_backend;
+        font_backend& m_font_backend;
         emitter& m_emitter;
         animator& m_animator;
         command_optimizer& m_command_optimizer;
@@ -409,12 +410,13 @@ namespace animgui {
         animgui::style m_style;
 
     public:
-        context_impl(input_backend& input_backend, render_backend& render_backend, emitter& emitter, animator& animator,
-                     command_optimizer& command_optimizer, image_compactor& image_compactor,
+        context_impl(input_backend& input_backend, render_backend& render_backend, font_backend& font_backend, emitter& emitter,
+                     animator& animator, command_optimizer& command_optimizer, image_compactor& image_compactor,
                      std::pmr::memory_resource* memory_resource)
-            : m_input_backend{ input_backend }, m_render_backend{ render_backend }, m_emitter{ emitter }, m_animator{ animator },
-              m_command_optimizer{ command_optimizer }, m_image_compactor{ image_compactor }, m_state_manager{ memory_resource },
-              m_codepoint_locator{ image_compactor, memory_resource },
+            : m_input_backend{ input_backend }, m_render_backend{ render_backend }, m_font_backend{ font_backend },
+              m_emitter{ emitter }, m_animator{ animator }, m_command_optimizer{ command_optimizer },
+              m_image_compactor{ image_compactor }, m_state_manager{ memory_resource }, m_codepoint_locator{ image_compactor,
+                                                                                                             memory_resource },
               m_command_fallback_translator{ render_backend.supported_primitives() },
               m_memory_resource{ memory_resource }, m_style{ nullptr, {}, {}, {}, {}, {}, {}, {}, 0.0f } {
             set_classic_style(*this);
@@ -446,13 +448,16 @@ namespace animgui {
         texture_region load_image(const image_desc& image) override {
             return m_image_compactor.compact(image);
         }
+        std::shared_ptr<font> load_font(const std::pmr::string& name, float height) const override {
+            return m_font_backend.load_font(name, height);
+        }
     };
     ANIMGUI_API std::unique_ptr<context> create_animgui_context(input_backend& input_backend, render_backend& render_backend,
-                                                                emitter& emitter, animator& animator,
+                                                                font_backend& font_backend, emitter& emitter, animator& animator,
                                                                 command_optimizer& command_optimizer,
                                                                 image_compactor& image_compactor,
                                                                 std::pmr::memory_resource* memory_manager) {
-        return std::make_unique<context_impl>(input_backend, render_backend, emitter, animator, command_optimizer,
+        return std::make_unique<context_impl>(input_backend, render_backend, font_backend, emitter, animator, command_optimizer,
                                               image_compactor, memory_manager);
     }
     texture_region texture_region::sub_region(const bounds& bounds) const {

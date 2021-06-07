@@ -4,16 +4,14 @@
 #include <animgui/core/render_backend.hpp>
 #include <string_view>
 #define NOMINMAX
+#include <cassert>
 #include <d3d11.h>
 #include <d3dcompiler.h>
+#include <utility>
 
 using namespace std::literals;
 
 namespace animgui {
-    static void check_d3d_error(const HRESULT res) {
-        if(res != S_OK)
-            throw std::runtime_error{ "D3D11 Error: " + std::to_string(res) };
-    }
     static DXGI_FORMAT get_format(const channel channel) noexcept {
         if(channel == channel::alpha)
             return DXGI_FORMAT_R8_UNORM;
@@ -27,6 +25,12 @@ namespace animgui {
         channel m_channel;
         uvec2 m_size;
         bool m_own;
+        const std::function<void(long)>& m_error_checker;
+
+        void check_d3d_error(const HRESULT res) const {
+            if(res != S_OK)
+                m_error_checker(res);
+        }
 
     public:
         explicit texture_impl(const texture_impl&) = delete;
@@ -34,23 +38,27 @@ namespace animgui {
         texture_impl& operator=(const texture_impl&) = delete;
         texture_impl& operator=(texture_impl&&) = delete;
 
-        texture_impl(ID3D11Device* device, ID3D11DeviceContext* device_context, const channel channel, const uvec2 size)
-            : m_texture{ nullptr }, m_device_context{ device_context }, m_channel{ channel }, m_size{ size }, m_own{ true } {
+        texture_impl(ID3D11Device* device, ID3D11DeviceContext* device_context, const channel channel, const uvec2 size,
+                     const std::function<void(long)>& error_checker)
+            : m_texture{ nullptr }, m_device_context{ device_context }, m_channel{ channel }, m_size{ size }, m_own{ true },
+              m_error_checker{ error_checker } {
             D3D11_TEXTURE2D_DESC desc{ size.x,
                                        size.y,
                                        1,
                                        1,
                                        get_format(channel),
                                        DXGI_SAMPLE_DESC{ 1, 0 },
-                                       D3D11_USAGE_DYNAMIC,
+                                       D3D11_USAGE_DEFAULT,
                                        D3D11_BIND_SHADER_RESOURCE,
-                                       D3D11_CPU_ACCESS_WRITE,
+                                       0,
                                        0 };
             check_d3d_error(device->CreateTexture2D(&desc, nullptr, &m_texture));
         }
 
-        texture_impl(ID3D11Texture2D* handle, ID3D11DeviceContext* device_context, const channel channel, const uvec2 size)
-            : m_texture{ handle }, m_device_context{ device_context }, m_channel{ channel }, m_size{ size }, m_own(false) {}
+        texture_impl(ID3D11Texture2D* handle, ID3D11DeviceContext* device_context, const channel channel, const uvec2 size,
+                     const std::function<void(long)>& error_checker)
+            : m_texture{ handle }, m_device_context{ device_context }, m_channel{ channel }, m_size{ size },
+              m_own(false), m_error_checker{ error_checker } {}
 
         ~texture_impl() override {
             if(m_own) {
@@ -61,31 +69,26 @@ namespace animgui {
         void update_texture(const uvec2 offset, const image_desc& image) override {
             if(image.channels != m_channel)
                 throw std::runtime_error{ "mismatched channel" };
-            D3D11_MAPPED_SUBRESOURCE mapped_resource;
-            check_d3d_error(m_device_context->Map(m_texture, 0, D3D11_MAP_WRITE, 0, &mapped_resource));
-            const auto src = static_cast<const uint8_t*>(image.data);
-            const auto dst = static_cast<uint8_t*>(mapped_resource.pData);
-            const auto size_src = m_channel == channel::alpha ? 1 : (m_channel == channel::rgb ? 3 : 4);
-            const auto size_dst = m_channel == channel::alpha ? 1 : 4;
-            for(uint32_t i = 0; i < image.size.y; ++i) {
-                const auto base_src = src + size_src * image.size.x * i;
-                // ReSharper disable once CppTooWideScope
-                const auto base_dst = dst + mapped_resource.RowPitch * (i + offset.y);
 
-                if(m_channel == channel::rgb) {
-                    for(uint32_t j = 0; j < image.size.x; ++j) {
-                        const auto ptr_src = base_src + size_src * j;
-                        const auto ptr_dst = base_dst + size_dst * (j + offset.x);
-                        ptr_dst[0] = ptr_src[0];
-                        ptr_dst[1] = ptr_src[1];
-                        ptr_dst[2] = ptr_src[2];
-                        ptr_dst[3] = 255;
-                    }
-                } else {
-                    memcpy(base_dst + size_dst * offset.x, base_src, size_dst * image.size.x);
+            image_desc src = image;
+            std::pmr::vector<uint8_t> rgba;
+            if(image.channels == channel::rgb) {
+                rgba.resize(image.size.x * image.size.y * 4);
+                auto read_ptr = static_cast<const uint8_t*>(image.data);
+                auto write_ptr = rgba.data();
+                const auto end = read_ptr + image.size.x * image.size.y * 3;
+                while(read_ptr != end) {
+                    *(write_ptr++) = *(read_ptr++);
+                    *(write_ptr++) = *(read_ptr++);
+                    *(write_ptr++) = *(read_ptr++);
+                    *(write_ptr++) = 255;
                 }
+
+                src.data = rgba.data();
             }
-            m_device_context->Unmap(m_texture, 0);
+            const auto size_dst = m_channel == channel::alpha ? 1 : 4;
+            D3D11_BOX box{ offset.x, offset.y, 0, offset.x + src.size.x, offset.y + src.size.y, 1 };
+            m_device_context->UpdateSubresource(m_texture, 0, &box, src.data, src.size.x * size_dst, 0);
         }
 
         [[nodiscard]] uvec2 texture_size() const noexcept override {
@@ -105,6 +108,7 @@ namespace animgui {
         cbuffer constant_buffer : register(b0) {
             float2 size;
             int mode;
+            int padding;
         };
         struct VS_INPUT {
             float2 pos : POSITION;
@@ -120,7 +124,7 @@ namespace animgui {
 
         PS_INPUT main(VS_INPUT input) {
             PS_INPUT output;
-            output.pos = float4(pos.x/size.x*2.0f-1.0f,pos.y/size.y*2.0f, 0.0f, 1.0f);
+            output.pos = float4(input.pos.x/size.x*2.0f-1.0f,1.0f-input.pos.y/size.y*2.0f, 0.0f, 1.0f);
             output.tex_coord  = input.tex_coord;
             output.color = input.color;
             return output;
@@ -131,6 +135,7 @@ namespace animgui {
         cbuffer constant_buffer : register(b0) {
             float2 size;
             int mode;
+            int padding;
         };
         struct PS_INPUT {
             float4 pos : SV_POSITION;
@@ -152,13 +157,17 @@ namespace animgui {
     struct constant_buffer final {
         vec2 size;
         int mode;
+        int padding;
     };
+
+    static_assert(sizeof(constant_buffer) % 16 == 0);
 
     class d3d11_backend final : public render_backend {
         std::pmr::vector<command> m_command_list;
         animgui::cursor m_cursor;
         ID3D11Device* m_device;
         ID3D11DeviceContext* m_device_context;
+        std::function<void(long)> m_error_checker;
 
         ID3D11Buffer* m_vertex_buffer = nullptr;
         size_t m_vertex_buffer_size = 0;
@@ -172,6 +181,11 @@ namespace animgui {
         ID3D11DepthStencilState* m_depth_stencil_state = nullptr;
 
         std::pmr::unordered_map<uint64_t, ID3D11ShaderResourceView*> m_texture_shader_resource_view;
+
+        void check_d3d_error(const HRESULT res) const {
+            if(res != S_OK)
+                m_error_checker(res);
+        }
 
         void update_vertex_buffer(const std::pmr::vector<vertex>& vertices) {
             if(m_vertex_buffer_size < vertices.size()) {
@@ -197,6 +211,8 @@ namespace animgui {
             callback(clip);
         }
         static D3D11_PRIMITIVE_TOPOLOGY get_primitive_type(const primitive_type type) noexcept {
+            // ReSharper disable once CppDefaultCaseNotHandledInSwitchStatement
+            // ReSharper disable once CppIncompleteSwitchStatement
             switch(type) {
                 case primitive_type::triangles:
                     return D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
@@ -227,14 +243,16 @@ namespace animgui {
             const LONG right = static_cast<int>(std::ceil(clip.right));
             const LONG bottom = static_cast<int>(std::ceil(clip.bottom));
             const LONG top = static_cast<int>(std::floor(clip.top));
-            const D3D11_RECT clip_rect{ left, static_cast<LONG>(screen_size.y) - bottom, right - left, bottom - top };
+            const D3D11_RECT clip_rect{ left, top, right, bottom };
             m_device_context->RSSetScissorRects(1, &clip_rect);
 
             const float blend_factor[4] = { 0.f, 0.f, 0.f, 0.f };
             m_device_context->OMSetBlendState(m_blend_state, blend_factor, 0xFFFFFFFF);
             m_device_context->OMSetDepthStencilState(m_depth_stencil_state, 0);
             m_device_context->VSSetShader(m_vertex_shader, nullptr, 0);
+            m_device_context->VSSetConstantBuffers(0, 1, &m_constant_buffer);
             m_device_context->PSSetShader(m_pixel_shader, nullptr, 0);
+            m_device_context->PSSetConstantBuffers(0, 1, &m_constant_buffer);
             m_device_context->IASetInputLayout(m_input_layout);
             m_device_context->GSSetShader(nullptr, nullptr, 0);
             m_device_context->HSSetShader(nullptr, nullptr, 0);
@@ -244,7 +262,9 @@ namespace animgui {
             uint32_t stride = sizeof(vertex);
             uint32_t offset = 0;
             m_device_context->IASetVertexBuffers(0, 1, &m_vertex_buffer, &stride, &offset);
+
             {
+                // TODO: lazy update
                 D3D11_MAPPED_SUBRESOURCE mapped_resource;
                 check_d3d_error(m_device_context->Map(m_constant_buffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped_resource));
                 auto& uniform = *static_cast<constant_buffer*>(mapped_resource.pData);
@@ -252,7 +272,6 @@ namespace animgui {
                 uniform.mode = (texture ? (texture->channels() == channel::alpha ? 1 : 0) : 2);
                 m_device_context->Unmap(m_constant_buffer, 0);
             }
-            // TODO: fallback points & lines & quads to triangles
             m_device_context->IASetPrimitiveTopology(get_primitive_type(type));
             if(texture) {
                 m_device_context->PSSetSamplers(0, 1, &m_sampler_state);
@@ -264,12 +283,19 @@ namespace animgui {
         }
 
     public:
-        d3d11_backend(ID3D11Device* device, ID3D11DeviceContext* device_context)
-            : m_cursor{ cursor::arrow }, m_device{ device }, m_device_context{ device_context } {
+        d3d11_backend(ID3D11Device* device, ID3D11DeviceContext* device_context, std::function<void(long)> error_checker)
+            : m_cursor{ cursor::arrow }, m_device{ device }, m_device_context{ device_context }, m_error_checker{ std::move(
+                                                                                                     error_checker) } {
+
             {
                 ID3DBlob* vertex_shader_blob;
-                check_d3d_error(D3DCompile(vertex_shader_src.data(), vertex_shader_src.length(), nullptr, nullptr, nullptr,
-                                           "main", "vs_5_0", 0, 0, &vertex_shader_blob, nullptr));
+                ID3DBlob* compile_log;
+                if(D3DCompile(vertex_shader_src.data(), vertex_shader_src.length(), nullptr, nullptr, nullptr, "main", "vs_5_0",
+                              0, 0, &vertex_shader_blob, &compile_log) != S_OK) {
+                    throw std::runtime_error{ "vertex shader compilation failed: "s +
+                                              static_cast<char*>(compile_log->GetBufferPointer()) };
+                }
+
                 check_d3d_error(m_device->CreateVertexShader(vertex_shader_blob->GetBufferPointer(),
                                                              vertex_shader_blob->GetBufferSize(), nullptr, &m_vertex_shader));
 
@@ -289,8 +315,12 @@ namespace animgui {
 
             {
                 ID3DBlob* pixel_shader_blob;
-                check_d3d_error(D3DCompile(vertex_shader_src.data(), vertex_shader_src.length(), nullptr, nullptr, nullptr,
-                                           "main", "ps_5_0", 0, 0, &pixel_shader_blob, nullptr));
+                ID3DBlob* compile_log;
+                if(D3DCompile(pixel_shader_src.data(), pixel_shader_src.length(), nullptr, nullptr, nullptr, "main", "ps_5_0", 0,
+                              0, &pixel_shader_blob, &compile_log) != S_OK) {
+                    throw std::runtime_error{ "pixel shader compilation failed: "s +
+                                              static_cast<char*>(compile_log->GetBufferPointer()) };
+                }
                 check_d3d_error(m_device->CreatePixelShader(pixel_shader_blob->GetBufferPointer(),
                                                             pixel_shader_blob->GetBufferSize(), nullptr, &m_pixel_shader));
 
@@ -298,8 +328,10 @@ namespace animgui {
             }
 
             {
-                D3D11_BUFFER_DESC constant_buffer_desc{ sizeof(constant_buffer), D3D11_USAGE_DYNAMIC, D3D11_BIND_CONSTANT_BUFFER,
-                                                        D3D11_CPU_ACCESS_WRITE, 0 };
+                D3D11_BUFFER_DESC constant_buffer_desc{
+                    sizeof(constant_buffer), D3D11_USAGE_DYNAMIC, D3D11_BIND_CONSTANT_BUFFER, D3D11_CPU_ACCESS_WRITE, 0,
+                    sizeof(constant_buffer)
+                };
                 check_d3d_error(m_device->CreateBuffer(&constant_buffer_desc, nullptr, &m_constant_buffer));
             }
 
@@ -307,7 +339,8 @@ namespace animgui {
                 D3D11_BLEND_DESC desc{};
                 desc.AlphaToCoverageEnable = false;
                 desc.RenderTarget[0].BlendEnable = true;
-                desc.RenderTarget[0].SrcBlend = desc.RenderTarget[0].SrcBlendAlpha = D3D11_BLEND_SRC_ALPHA;
+                desc.RenderTarget[0].SrcBlend = D3D11_BLEND_SRC_ALPHA;
+                desc.RenderTarget[0].SrcBlendAlpha = D3D11_BLEND_ONE;
                 desc.RenderTarget[0].DestBlend = desc.RenderTarget[0].DestBlendAlpha = D3D11_BLEND_INV_SRC_ALPHA;
                 desc.RenderTarget[0].BlendOp = desc.RenderTarget[0].BlendOpAlpha = D3D11_BLEND_OP_ADD;
                 desc.RenderTarget[0].RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
@@ -326,7 +359,15 @@ namespace animgui {
 
             {
                 D3D11_SAMPLER_DESC desc{};
-                m_device->CreateSamplerState(&desc, &m_sampler_state);
+                desc.AddressU = D3D11_TEXTURE_ADDRESS_CLAMP;
+                desc.AddressV = D3D11_TEXTURE_ADDRESS_CLAMP;
+                desc.AddressW = D3D11_TEXTURE_ADDRESS_CLAMP;
+                desc.Filter = D3D11_FILTER_MIN_LINEAR_MAG_MIP_POINT;
+                desc.ComparisonFunc = D3D11_COMPARISON_ALWAYS;
+                desc.MaxAnisotropy = 0;
+                desc.MinLOD = desc.MaxLOD = 0.0f;
+                desc.MipLODBias = 0.0f;
+                check_d3d_error(m_device->CreateSamplerState(&desc, &m_sampler_state));
             }
         }
         explicit d3d11_backend(const d3d11_backend&) = delete;
@@ -364,16 +405,18 @@ namespace animgui {
             return m_cursor;
         }
         std::shared_ptr<texture> create_texture(uvec2 size, channel channels) override {
-            return std::make_shared<texture_impl>(m_device, m_device_context, channels, size);
+            return std::make_shared<texture_impl>(m_device, m_device_context, channels, size, m_error_checker);
         }
         std::shared_ptr<texture> create_texture_from_native_handle(const uint64_t handle, uvec2 size, channel channels) override {
-            return std::make_shared<texture_impl>(reinterpret_cast<ID3D11Texture2D*>(handle), m_device_context, channels, size);
+            return std::make_shared<texture_impl>(reinterpret_cast<ID3D11Texture2D*>(handle), m_device_context, channels, size,
+                                                  m_error_checker);
         }
         [[nodiscard]] primitive_type supported_primitives() const noexcept override {
             return primitive_type::triangle_strip | primitive_type::triangles;
         }
     };
-    ANIMGUI_API std::shared_ptr<render_backend> create_d3d11_backend(ID3D11Device* device, ID3D11DeviceContext* device_context) {
-        return std::make_shared<d3d11_backend>(device, device_context);
+    ANIMGUI_API std::shared_ptr<render_backend> create_d3d11_backend(ID3D11Device* device, ID3D11DeviceContext* device_context,
+                                                                     const std::function<void(long)>& error_checker) {
+        return std::make_shared<d3d11_backend>(device, device_context, error_checker);
     }
 }  // namespace animgui

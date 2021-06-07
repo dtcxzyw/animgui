@@ -180,27 +180,31 @@ namespace animgui {
             while(beg != end) {
                 const auto cp = utf8::next(beg, end);
                 const auto glyph = item.font->to_glyph(cp);
-                const auto tex = font_callback(*item.font, glyph);
                 const auto offset_x = item.font->calculate_advance(glyph, prev);
                 const auto bounds = item.font->calculate_bounds(glyph);
                 prev = glyph;
 
-                const auto left = rect.left + bounds.left;
-                const auto right = rect.left + bounds.right;
-                const auto top = rect.top + bounds.top;
-                const auto bottom = rect.top + bounds.bottom;
+                if(glyph.idx) {
+                    const auto tex = font_callback(*item.font, glyph);
+                    const auto left = rect.left + bounds.left;
+                    const auto right = rect.left + bounds.right;
+                    const auto top = rect.top + bounds.top;
+                    const auto bottom = rect.top + bounds.bottom;
 
-                const auto p0 = vec2{ left, top }, p1 = vec2{ left, bottom }, p2 = vec2{ right, bottom }, p3 = vec2{ right, top };
-                const auto [s0, s1, t0, t1] = tex.region;
-                commands.push_back({ clip_rect,
-                                     primitives{ primitive_type::triangle_strip,
-                                                 { { { p0, { s0, t0 }, item.color },
-                                                     { p1, { s0, t1 }, item.color },
-                                                     { p3, { s1, t0 }, item.color },
-                                                     { p2, { s1, t1 }, item.color } },
-                                                   commands.get_allocator().resource() },
-                                                 tex.texture,
-                                                 0.0f } });
+                    const auto p0 = vec2{ left, top }, p1 = vec2{ left, bottom }, p2 = vec2{ right, bottom },
+                               p3 = vec2{ right, top };
+                    const auto [s0, s1, t0, t1] = tex.region;
+                    commands.push_back({ clip_rect,
+                                         primitives{ primitive_type::triangle_strip,
+                                                     { { { p0, { s0, t0 }, item.color },
+                                                         { p1, { s0, t1 }, item.color },
+                                                         { p3, { s1, t0 }, item.color },
+                                                         { p2, { s1, t1 }, item.color } },
+                                                       commands.get_allocator().resource() },
+                                                     tex.texture,
+                                                     0.0f } });
+                }
+
                 rect.left += offset_x;
                 if(rect.left >= clip_rect.right)
                     break;
