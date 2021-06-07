@@ -14,9 +14,10 @@ namespace animgui {
     class animator;
     class emitter;
     class canvas;
+    class command_optimizer;
+    class image_compactor;
 
     // TODO: color management & interacting mode(mouse&keyboard/VR/game pad)
-    // TODO: export image_compactor & command optimizer
     class context {
     public:
         context() = default;
@@ -35,6 +36,7 @@ namespace animgui {
 
     ANIMGUI_API std::unique_ptr<context>
     create_animgui_context(input_backend& input_backend, render_backend& render_backend, emitter& emitter, animator& animator,
+                           command_optimizer& command_optimizer, image_compactor& image_compactor,
                            std::pmr::memory_resource* memory_manager = std::pmr::get_default_resource());
 
 };  // namespace animgui

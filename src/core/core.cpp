@@ -3,11 +3,12 @@
 #include <animgui/builtins/styles.hpp>
 #include <animgui/core/animator.hpp>
 #include <animgui/core/canvas.hpp>
+#include <animgui/core/command_optimizer.hpp>
 #include <animgui/core/context.hpp>
 #include <animgui/core/font_backend.hpp>
+#include <animgui/core/image_compactor.hpp>
 #include <animgui/core/input_backend.hpp>
 #include <animgui/core/style.hpp>
-#include <cassert>
 #include <list>
 #include <optional>
 #include <random>
@@ -129,8 +130,9 @@ namespace animgui {
             m_animation_state_hash = hash;
             m_state_manager.register_type(
                 hash, state_size, alignment, [](void*, size_t) {}, [](void*, size_t) {});
-            m_region_stack.push(std::make_tuple(std::numeric_limits<size_t>::max(), uid{ 0 }, std::minstd_rand{},
-                                                bounds{ 0.0f, size.x, 0.0f, size.y }));  // NOLINT(cert-msc51-cpp)
+            m_region_stack.push(std::make_tuple(std::numeric_limits<size_t>::max(), uid{ 0 },
+                                                std::minstd_rand{},  // NOLINT(cert-msc51-cpp)
+                                                bounds{ 0.0f, size.x, 0.0f, size.y }));
         }
         animgui::style& style() noexcept override {
             return m_context.style();
@@ -213,170 +215,6 @@ namespace animgui {
         }
     };
 
-    class command_optimizer final {
-    public:
-        [[nodiscard]] std::pmr::vector<command> optimize(std::pmr::vector<command> src) const {
-            // noop
-            // TODO: merge draw calls
-            return src;
-        }
-    };
-
-    static constexpr uint32_t image_pool_size = 1026;
-
-    class compacted_image final {
-        static constexpr uint32_t margin = 1;
-
-        std::shared_ptr<texture> m_texture;
-        std::pmr::memory_resource* m_memory_resource;
-
-        struct tree_node final {
-            int id;
-            uvec2 size;
-            uvec2 pos;
-            std::pmr::vector<int> children;
-            int parent;
-            explicit tree_node(std::pmr::memory_resource* memory_resource)
-                : id{ -1 }, size{}, pos{}, children{ memory_resource }, parent{ -1 } {}
-        };
-
-        struct root_info final {
-            uint32_t right{ 0 };
-            std::pmr::vector<tree_node> nodes;
-        };
-
-        uint32_t m_tex_w{ image_pool_size }, m_tex_h{ image_pool_size };
-        std::pmr::vector<root_info> m_columns;
-
-        void create_new_column(uint32_t start) {
-            root_info column;
-            column.right = m_tex_w;
-
-            tree_node root(m_memory_resource);
-            root.id = static_cast<int>(column.nodes.size());
-            root.size.x = 0;
-            root.size.y = m_tex_h;
-            root.pos.x = start;
-            root.pos.y = 0;
-
-            column.nodes.push_back(root);
-            if(!m_columns.empty())
-                m_columns.back().right = start;
-            m_columns.push_back(column);
-        }
-
-        [[nodiscard]] bounds update_texture(uvec2 offset, const image_desc& image) const {
-            offset.x += margin;
-            offset.y += margin;
-            m_texture->update_texture(offset, image);
-            constexpr float norm = image_pool_size;
-            return { static_cast<float>(offset.x) / norm, static_cast<float>(offset.x + image.size.x) / norm,
-                     static_cast<float>(offset.y) / norm, static_cast<float>(offset.y + image.size.y) / norm };
-        }
-
-    public:
-        explicit compacted_image(std::shared_ptr<texture> texture, std::pmr::memory_resource* memory_resource)
-            : m_texture{ std::move(texture) }, m_memory_resource{ memory_resource } {
-            create_new_column(0);
-        }
-        [[nodiscard]] std::shared_ptr<texture> texture() const {
-            return m_texture;
-        }
-        std::optional<bounds> allocate(const image_desc& image) {
-            // Create a new node.
-            tree_node new_node(m_memory_resource);
-            new_node.size.x = image.size.x + margin * 2;
-            new_node.size.y = image.size.y + margin * 2;
-            // The image should be smaller than the size of texture.
-            assert(new_node.size.x <= m_tex_w && new_node.size.y <= m_tex_h);
-            // Find a place in existing columns.
-            for(auto&& column : m_columns) {
-                for(auto&& parent : column.nodes) {
-                    if(parent.children.empty()) {
-                        if(parent.size.y >= new_node.size.y && parent.pos.x + parent.size.x + new_node.size.x <= column.right) {
-                            new_node.parent = parent.id;
-                            new_node.pos.x = parent.pos.x + parent.size.x;
-                            new_node.pos.y = parent.pos.y;
-                            new_node.id = static_cast<int>(column.nodes.size());
-                            parent.children.push_back(new_node.id);
-                            column.nodes.push_back(new_node);
-                            return update_texture(new_node.pos, image);
-                        }
-                    } else {
-                        if(tree_node& side = column.nodes[parent.children.back()];
-                           side.pos.y + side.size.y + new_node.size.y <= parent.pos.y + parent.size.y &&
-                           parent.pos.x + parent.size.x + new_node.size.y <= column.right) {
-                            new_node.parent = parent.id;
-                            new_node.pos.x = parent.pos.x + parent.size.x;
-                            new_node.pos.y = side.pos.y + side.size.y;
-                            new_node.id = static_cast<int>(column.nodes.size());
-                            parent.children.push_back(new_node.id);
-                            column.nodes.push_back(new_node);
-                            return update_texture(new_node.pos, image);
-                        }
-                    }
-                }
-            }
-            // Create a new column.
-            uint32_t right = 0;
-            auto&& column = m_columns.back();
-            for(auto&& node : column.nodes)
-                right = std::max(right, node.pos.x + node.size.x);
-            if(m_tex_w - right >= new_node.size.x) {
-                create_new_column(right);
-                auto&& new_column = m_columns.back();
-                new_node.parent = 0;
-                new_node.pos.x = right;
-                new_node.pos.y = 0;
-                new_node.id = 1;
-                new_column.nodes[0].children.push_back(1);
-                new_column.nodes.push_back(new_node);
-                return update_texture(new_node.pos, image);
-            }
-            // Allocation failed.
-            return std::nullopt;
-        }
-    };
-
-    class image_compactor final {
-        std::pmr::vector<compacted_image> m_images[3];
-        render_backend& m_backend;
-        std::pmr::memory_resource* m_memory_resource;
-
-    public:
-        explicit image_compactor(render_backend& render_backend, std::pmr::memory_resource* memory_resource)
-            : m_images{ std::pmr::vector<compacted_image>{ memory_resource },
-                        std::pmr::vector<compacted_image>{ memory_resource },
-                        std::pmr::vector<compacted_image>{ memory_resource } },
-              m_backend{ render_backend }, m_memory_resource{ memory_resource } {}
-        ~image_compactor() = default;
-        image_compactor(const image_compactor& rhs) = delete;
-        image_compactor(image_compactor&& rhs) = default;
-        image_compactor& operator=(const image_compactor& rhs) = delete;
-        image_compactor& operator=(image_compactor&& rhs) = delete;
-
-        void reset() {
-            for(auto&& images : m_images)
-                images.clear();
-        }
-        texture_region compact(const image_desc& image) {
-            if(std::max(image.size.x, image.size.y) >= image_pool_size) {
-                auto tex = m_backend.create_texture(image.size, image.channels);
-                tex->update_texture(uvec2{ 0, 0 }, image);
-                return { std::move(tex), bounds{ 0.0f, 1.0f, 0.0f, 1.0f } };
-            }
-            auto& images = m_images[static_cast<uint32_t>(image.channels)];
-            for(auto&& pool : images) {
-                if(auto bounds = pool.allocate(image)) {
-                    return { pool.texture(), bounds.value() };
-                }
-            }
-            images.emplace_back(m_backend.create_texture({ image_pool_size, image_pool_size }, image.channels),
-                                m_memory_resource);
-            auto&& pool = images.back();
-            return { pool.texture(), pool.allocate(image).value() };
-        }
-    };
     // TODO: improve performance
     class codepoint_locator final {
         std::pmr::unordered_map<font*, std::pmr::unordered_map<uint32_t, texture_region>> m_lut;
@@ -561,21 +399,22 @@ namespace animgui {
         render_backend& m_render_backend;
         emitter& m_emitter;
         animator& m_animator;
+        command_optimizer& m_command_optimizer;
+        image_compactor& m_image_compactor;
 
         state_manager m_state_manager;
-        image_compactor m_image_compactor;
         codepoint_locator m_codepoint_locator;
-        command_optimizer m_command_optimizer;
         command_fallback_translator m_command_fallback_translator;
         std::pmr::memory_resource* m_memory_resource;
         animgui::style m_style;
 
     public:
         context_impl(input_backend& input_backend, render_backend& render_backend, emitter& emitter, animator& animator,
+                     command_optimizer& command_optimizer, image_compactor& image_compactor,
                      std::pmr::memory_resource* memory_resource)
             : m_input_backend{ input_backend }, m_render_backend{ render_backend }, m_emitter{ emitter }, m_animator{ animator },
-              m_state_manager{ memory_resource }, m_image_compactor{ render_backend, memory_resource },
-              m_codepoint_locator{ m_image_compactor, memory_resource },
+              m_command_optimizer{ command_optimizer }, m_image_compactor{ image_compactor }, m_state_manager{ memory_resource },
+              m_codepoint_locator{ image_compactor, memory_resource },
               m_command_fallback_translator{ render_backend.supported_primitives() },
               m_memory_resource{ memory_resource }, m_style{ nullptr, {}, {}, {}, {}, {}, {}, {}, 0.0f } {
             set_classic_style(*this);
@@ -601,7 +440,6 @@ namespace animgui {
                 [&](font& font, const glyph glyph) -> texture_region { return m_codepoint_locator.locate(font, glyph); });
             auto optimized_commands = m_command_optimizer.optimize(std::move(commands));
             m_command_fallback_translator.transform(optimized_commands);
-            // TODO: optimize again?
             m_render_backend.update_command_list(std::move(optimized_commands));
             m_render_backend.set_cursor(canvas.cursor());
         }
@@ -609,10 +447,13 @@ namespace animgui {
             return m_image_compactor.compact(image);
         }
     };
-    std::unique_ptr<context> create_animgui_context(input_backend& input_backend, render_backend& render_backend,
-                                                    emitter& emitter, animator& animator,
-                                                    std::pmr::memory_resource* memory_manager) {
-        return std::make_unique<context_impl>(input_backend, render_backend, emitter, animator, memory_manager);
+    ANIMGUI_API std::unique_ptr<context> create_animgui_context(input_backend& input_backend, render_backend& render_backend,
+                                                                emitter& emitter, animator& animator,
+                                                                command_optimizer& command_optimizer,
+                                                                image_compactor& image_compactor,
+                                                                std::pmr::memory_resource* memory_manager) {
+        return std::make_unique<context_impl>(input_backend, render_backend, emitter, animator, command_optimizer,
+                                              image_compactor, memory_manager);
     }
     texture_region texture_region::sub_region(const bounds& bounds) const {
         const auto w = region.right - region.left, h = region.bottom - region.top;
@@ -620,5 +461,4 @@ namespace animgui {
                  { region.left + w * bounds.left, region.left + w * bounds.right, region.top + h * bounds.top,
                    region.top + h * bounds.bottom } };
     }
-
 }  // namespace animgui

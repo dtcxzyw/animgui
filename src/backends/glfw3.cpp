@@ -210,6 +210,7 @@ namespace animgui {
         GLFWwindow* m_window;
         vec2 m_cursor_pos;
         bool m_key_state[256];
+        const std::function<void()>& m_redraw;
 
         void add_char(const uint32_t codepoint) {}
         void key_event(const int key, const bool state) {
@@ -219,9 +220,13 @@ namespace animgui {
             m_cursor_pos = pos;
         }
         void scroll_event(vec2 offset) {}
+        void refresh_event() const {
+            m_redraw();
+        }
 
     public:
-        explicit glfw3_backend(GLFWwindow* window) : m_window{ window }, m_cursor_pos{ 0.0f, 0.0f }, m_key_state{} {
+        explicit glfw3_backend(GLFWwindow* window, const std::function<void()>& redraw)
+            : m_window{ window }, m_cursor_pos{ 0.0f, 0.0f }, m_key_state{}, m_redraw{ redraw } {
             glfwSetWindowUserPointer(m_window, this);
             glfwSetCharCallback(m_window, [](GLFWwindow* const win, const unsigned int cp) {
                 static_cast<glfw3_backend*>(glfwGetWindowUserPointer(win))->add_char(cp);
@@ -241,6 +246,9 @@ namespace animgui {
                 static_cast<glfw3_backend*>(glfwGetWindowUserPointer(win))
                     ->cursor_event(vec2{ static_cast<float>(x), static_cast<float>(y) });
             });
+            glfwSetWindowRefreshCallback(m_window, [](GLFWwindow* const win) {
+                static_cast<glfw3_backend*>(glfwGetWindowUserPointer(win))->refresh_event();
+            });
         }
         std::pmr::string get_clipboard_text() override {
             return glfwGetClipboardString(nullptr);
@@ -256,7 +264,7 @@ namespace animgui {
         }
     };
 
-    ANIMGUI_API std::shared_ptr<input_backend> create_glfw3_backend(GLFWwindow* window) {
-        return std::make_shared<glfw3_backend>(window);
+    ANIMGUI_API std::shared_ptr<input_backend> create_glfw3_backend(GLFWwindow* window, const std::function<void()>& redraw) {
+        return std::make_shared<glfw3_backend>(window, redraw);
     }
 }  // namespace animgui

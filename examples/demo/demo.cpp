@@ -6,7 +6,9 @@
 #include <animgui/backends/opengl3.hpp>
 #include <animgui/backends/stbfont.hpp>
 #include <animgui/builtins/animators.hpp>
+#include <animgui/builtins/command_optimizers.hpp>
 #include <animgui/builtins/emitters.hpp>
+#include <animgui/builtins/image_compactors.hpp>
 #include <animgui/builtins/layouts.hpp>
 #include <animgui/builtins/widgets.hpp>
 #include <animgui/core/canvas.hpp>
@@ -151,21 +153,25 @@ int main() {
 
     {
         std::pmr::memory_resource* memory_resource = std::pmr::get_default_resource();
-        const auto glfw3_backend = animgui::create_glfw3_backend(window);
+        std::function<void()> draw;
+        const auto glfw3_backend = animgui::create_glfw3_backend(window, draw);
         const auto ogl3_backend = animgui::create_opengl3_backend();
         const auto stb_font_backend = animgui::create_stb_font_backend();
         const auto font = stb_font_backend->load_font("msyh", 100.0f);
         const auto animator = animgui::create_dummy_animator();
         const auto emitter = animgui::create_builtin_emitter(memory_resource);
-        auto ctx = animgui::create_animgui_context(*glfw3_backend, *ogl3_backend, *emitter, *animator, memory_resource);
+        const auto command_optimizer = animgui::create_builtin_command_optimizer();
+        const auto image_compactor = animgui::create_builtin_image_compactor(*ogl3_backend, memory_resource);
+        auto ctx = animgui::create_animgui_context(*glfw3_backend, *ogl3_backend, *emitter, *animator, *command_optimizer,
+                                                   *image_compactor, memory_resource);
         auto&& style = ctx->style();
         style.font = font;
 
         glfwSwapInterval(0);
 
         auto last = glfwGetTime();
-        while(!glfwWindowShouldClose(window)) {
-            glfwPollEvents();
+
+        draw = [&] {
             int w, h;
             glfwGetFramebufferSize(window, &w, &h);
 
@@ -181,6 +187,11 @@ int main() {
             glClear(GL_COLOR_BUFFER_BIT);
             ogl3_backend->emit(animgui::uvec2{ static_cast<uint32_t>(w), static_cast<uint32_t>(h) });
             glfwSwapBuffers(window);
+        };
+
+        while(!glfwWindowShouldClose(window)) {
+            glfwPollEvents();
+            draw();
         }
     }
     glfwDestroyWindow(window);
