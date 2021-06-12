@@ -13,6 +13,7 @@
 #include <animgui/builtins/layouts.hpp>
 #include <animgui/core/context.hpp>
 #include <iostream>
+#include <string>
 
 [[noreturn]] void fail(const std::string& str) {
     std::cout << str << std::endl;

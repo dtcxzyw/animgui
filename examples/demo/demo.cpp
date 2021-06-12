@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 
 #include "../application.hpp"
+#include <string>
 #include <animgui/builtins/layouts.hpp>
 #include <animgui/builtins/widgets.hpp>
 #include <animgui/core/canvas.hpp>

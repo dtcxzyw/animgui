@@ -16,6 +16,7 @@
 #include <animgui/core/context.hpp>
 #include <d3d11.h>
 #include <iostream>
+#include <string>
 
 [[noreturn]] void fail(const std::string& str) {
     std::cout << str << std::endl;
