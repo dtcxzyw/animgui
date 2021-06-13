@@ -144,15 +144,10 @@ namespace animgui {
         }
 
         static GLenum get_mode(const primitive_type type) noexcept {
-            switch(type) {
+            // ReSharper disable once CppIncompleteSwitchStatement CppDefaultCaseNotHandledInSwitchStatement
+            switch(type) {  // NOLINT(clang-diagnostic-switch)
                 case primitive_type::points:
                     return GL_POINTS;
-                case primitive_type::lines:
-                    return GL_LINES;
-                case primitive_type::line_strip:
-                    return GL_LINE_STRIP;
-                case primitive_type::line_loop:
-                    return GL_LINE_LOOP;
                 case primitive_type::triangles:
                     return GL_TRIANGLES;
                 case primitive_type::triangle_fan:
@@ -183,9 +178,7 @@ namespace animgui {
 
             glBindBuffer(GL_ARRAY_BUFFER, m_vbo);
             glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(vertex), vertices.data(), GL_STREAM_DRAW);
-            if(type == primitive_type::line_loop || type == primitive_type::lines || type == primitive_type::line_strip)
-                glLineWidth(point_line_size);
-            else if(type == primitive_type::points)
+            if(type == primitive_type::points)
                 glPointSize(point_line_size);
             glBindVertexArray(m_vao);
             glActiveTexture(GL_TEXTURE0);
@@ -287,8 +280,9 @@ namespace animgui {
             }
         }
         [[nodiscard]] primitive_type supported_primitives() const noexcept override {
-            return primitive_type::line_loop | primitive_type::lines | primitive_type::line_strip | primitive_type::points |
-                primitive_type::quads | primitive_type::triangle_fan | primitive_type::triangle_strip | primitive_type::triangles;
+            //Notice: Wide lines (width>1.0) in OpenGL3 are deprecated.
+            return primitive_type::points | primitive_type::quads | primitive_type::triangle_fan |
+                primitive_type::triangle_strip | primitive_type::triangles;
         }
     };
 
