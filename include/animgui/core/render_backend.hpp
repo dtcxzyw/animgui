@@ -73,8 +73,6 @@ namespace animgui {
         float point_line_size;
     };
 
-    enum class cursor { arrow, hand, horizontal, vertical, edit, cross_hair };
-
     struct command final {
         bounds clip;
         std::variant<native_callback, primitives> desc;
@@ -92,8 +90,6 @@ namespace animgui {
         virtual ~render_backend() = default;
 
         virtual void update_command_list(std::pmr::vector<command> command_list) = 0;
-        virtual void set_cursor(cursor cursor) noexcept = 0;
-        [[nodiscard]] virtual cursor cursor() const noexcept = 0;
         virtual std::shared_ptr<texture> create_texture(uvec2 size, channel channels) = 0;
         virtual std::shared_ptr<texture> create_texture_from_native_handle(uint64_t handle, uvec2 size, channel channels) = 0;
         virtual void emit(uvec2 screen_size) = 0;

@@ -124,7 +124,6 @@ namespace animgui {
         emitter& m_emitter;
         state_manager& m_state_manager;
         std::pmr::memory_resource* m_memory_resource;
-        cursor m_cursor;
         std::pmr::vector<operation> m_commands;
         std::pmr::deque<region_info> m_region_stack;
         size_t m_animation_state_hash;
@@ -135,7 +134,7 @@ namespace animgui {
                     std::pmr::memory_resource* memory_resource)
             : m_context{ context }, m_size{ size }, m_input_backend{ input_backend },
               m_step_function{ animator.step(delta_t) }, m_emitter{ emitter }, m_state_manager{ state_manager },
-              m_memory_resource{ memory_resource }, m_cursor{ cursor::arrow }, m_commands{ m_memory_resource },
+              m_memory_resource{ memory_resource }, m_commands{ m_memory_resource },
               m_region_stack{ m_memory_resource }, m_animation_state_hash{ 0 } {
             const auto [hash, state_size, alignment] = animator.state_storage();
             m_animation_state_hash = hash;
@@ -214,10 +213,6 @@ namespace animgui {
             const auto [x, y] = m_input_backend.get_cursor_pos();
             return bounds.left <= x && x < bounds.right && bounds.top <= y && y < bounds.bottom;
         }
-        void set_cursor(const cursor cursor) noexcept override {
-            if(cursor != cursor::arrow)
-                m_cursor = cursor;
-        }
         std::pair<size_t, uid> add_primitive(const uid uid, primitive primitive) override {
             const auto idx = m_commands.size();
             m_commands.push_back(std::move(primitive));
@@ -229,9 +224,6 @@ namespace animgui {
         [[nodiscard]] float step(const uid id, const float dest) override {
             return m_step_function(dest, m_animation_state_hash ? raw_storage(m_animation_state_hash, id) : nullptr);
         }
-        [[nodiscard]] cursor cursor() const noexcept {
-            return m_cursor;
-        }
         [[nodiscard]] vec2 calculate_bounds(const primitive& primitive) const override {
             return m_emitter.calculate_bounds(primitive, m_context.style());
         }
@@ -240,6 +232,9 @@ namespace animgui {
         }
         [[nodiscard]] animgui::input_backend& input_backend() const noexcept override {
             return m_input_backend;
+        }
+        bool region_request_focus(bool force) override {
+            return false;
         }
     };
 
@@ -471,7 +466,6 @@ namespace animgui {
             auto optimized_commands = m_command_optimizer.optimize(std::move(commands));
             m_command_fallback_translator.transform(optimized_commands);
             m_render_backend.update_command_list(std::move(optimized_commands));
-            m_render_backend.set_cursor(canvas.cursor());
         }
         texture_region load_image(const image_desc& image) override {
             return m_image_compactor.compact(image);

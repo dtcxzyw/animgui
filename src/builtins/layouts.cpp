@@ -38,15 +38,15 @@ namespace animgui {
     bool layout_proxy::pressed(const key_code key, const bounds& bounds) const {
         return m_parent.pressed(key, bounds);
     }
-    void layout_proxy::set_cursor(const cursor cursor) noexcept {
-        m_parent.set_cursor(cursor);
-    }
     std::pair<size_t, uid> layout_proxy::add_primitive(const uid uid, primitive primitive) {
         const auto [idx, id] = m_parent.add_primitive(uid, std::move(primitive));
         return { idx - m_offset, id };
     }
+    bool layout_proxy::region_request_focus(const bool force) {
+        return region_request_focus(force);
+    }
 
-    const animgui::style& layout_proxy::style() const noexcept {
+    const style& layout_proxy::style() const noexcept {
         return m_parent.style();
     }
     bool layout_proxy::hovered(const bounds& bounds) const {
@@ -208,10 +208,16 @@ namespace animgui {
             const auto height = style().font->height() * 1.1f;
             if(!has_attribute(m_attributes, window_attributes::no_title_bar)) {
                 const animgui::bounds bar{ 0.0f, m_size.x, 0.0f, height };
-                layout_proxy::push_region("title_bar"_id, bar);
-                if(layout_proxy::region_pressed(key_code::left_button)) {
+                const auto bar_uid = layout_proxy::push_region("title_bar"_id, bar).second;
+                bool& move = storage<bool>(bar_uid);
+                if(layout_proxy::region_pressed(key_code::left_button))
+                    move = true;
+                else if(!layout_proxy::input_backend().get_key(key_code::left_button))
+                    move = false;
+
+                if(move)
                     m_operator.move(layout_proxy::input_backend().mouse_move());
-                }
+
                 layout_proxy::add_primitive("background"_id, canvas_fill_rect{ bar, style().background_color });
                 if(title.has_value())
                     layout_row(*this, row_alignment::left,
@@ -250,7 +256,7 @@ namespace animgui {
         vec2 m_accumulate_delta;
 
     public:
-        native_window_operator(input_backend& input_backend)
+        explicit native_window_operator(input_backend& input_backend)
             : m_input_backend{ input_backend }, m_accumulate_delta{ 0.0f, 0.0f } {}
         void close() override {
             m_input_backend.close_window();

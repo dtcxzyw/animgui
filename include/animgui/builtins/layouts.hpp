@@ -23,7 +23,6 @@ namespace animgui {
         [[nodiscard]] bool pressed(key_code key, const bounds& bounds) const override;
         std::pair<size_t, uid> push_region(uid uid, const std::optional<bounds>& reserved_bounds) override;
         std::pair<size_t, uid> add_primitive(uid uid, primitive primitive) override;
-        void set_cursor(cursor cursor) noexcept final;
         float step(uid id, float dest) final;
         [[nodiscard]] const animgui::style& style() const noexcept final;
         [[nodiscard]] vec2 calculate_bounds(const primitive& primitive) const final;
@@ -31,7 +30,8 @@ namespace animgui {
         [[nodiscard]] bool hovered(const bounds& bounds) const override;
         [[nodiscard]] std::pmr::memory_resource* memory_resource() const noexcept final;
         uid region_sub_uid() override;
-        animgui::input_backend& input_backend() const noexcept override;
+        [[nodiscard]] animgui::input_backend& input_backend() const noexcept override;
+        bool region_request_focus(bool force) override;
     };
 
     // TODO: indent/separate

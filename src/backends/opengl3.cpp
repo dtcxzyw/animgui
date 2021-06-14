@@ -117,7 +117,6 @@ namespace animgui {
 
     class render_backend_impl final : public render_backend {
         std::pmr::vector<command> m_command_list;
-        animgui::cursor m_cursor;
         unsigned int m_program_id;
         unsigned int m_vbo;
         unsigned int m_vao;
@@ -192,7 +191,7 @@ namespace animgui {
         }
 
     public:
-        render_backend_impl() : m_cursor{ cursor::arrow }, m_vbo{ 0 }, m_vao{ 0 }, m_empty{ channel::rgba, uvec2{ 1, 1 } } {
+        render_backend_impl() : m_vbo{ 0 }, m_vao{ 0 }, m_empty{ channel::rgba, uvec2{ 1, 1 } } {
             const unsigned int shader_vert = glCreateShader(GL_VERTEX_SHADER);
             glShaderSource(shader_vert, 1, &shader_vert_src, nullptr);
             glCompileShader(shader_vert);
@@ -243,14 +242,6 @@ namespace animgui {
             m_command_list = std::move(command_list);
         }
 
-        void set_cursor(const animgui::cursor cursor) noexcept override {
-            m_cursor = cursor;
-        }
-
-        [[nodiscard]] animgui::cursor cursor() const noexcept override {
-            return m_cursor;
-        }
-
         std::shared_ptr<texture> create_texture(const uvec2 size, const channel channels) override {
             return std::make_shared<texture_impl>(channels, size);
         }
@@ -280,7 +271,7 @@ namespace animgui {
             }
         }
         [[nodiscard]] primitive_type supported_primitives() const noexcept override {
-            //Notice: Wide lines (width>1.0) in OpenGL3 are deprecated.
+            // Notice: Wide lines (width>1.0) in OpenGL3 are deprecated.
             return primitive_type::points | primitive_type::quads | primitive_type::triangle_fan |
                 primitive_type::triangle_strip | primitive_type::triangles;
         }

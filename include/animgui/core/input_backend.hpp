@@ -4,6 +4,8 @@
 #include "common.hpp"
 
 namespace animgui {
+    enum class cursor { arrow, hand, horizontal, vertical, edit, cross_hair };
+
     enum class key_code : uint32_t {
         left_button = 0x01,
         right_button = 0x02,
@@ -107,6 +109,8 @@ namespace animgui {
         float right_trigger;
     };
 
+    enum class input_mode { auto_switch, mouse, game_pad };
+
     class input_backend {
     public:
         input_backend() = default;
@@ -131,6 +135,8 @@ namespace animgui {
         [[nodiscard]] virtual std::pmr::string get_game_pad_name(size_t idx) const = 0;
         [[nodiscard]] virtual span<const size_t> list_game_pad() const noexcept = 0;
         [[nodiscard]] virtual const game_pad_state& get_game_pad_state(size_t idx) const noexcept = 0;
+        [[nodiscard]] virtual input_mode get_input_mode() const noexcept = 0;
+        [[nodiscard]] virtual void set_cursor(cursor cursor) noexcept = 0;
         // TODO: drop
     };
 }  // namespace animgui

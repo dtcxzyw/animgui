@@ -77,7 +77,7 @@ namespace animgui {
                                   test_game_pad(layout);
                                   layout.newline();
                                   if(button_label(layout, "Exit")) {
-                                      std::exit(0);
+                                      layout.input_backend().close_window();
                                   }
                               });
                           });

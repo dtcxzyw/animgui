@@ -45,11 +45,11 @@ namespace animgui {
 
         [[nodiscard]] virtual vec2 reserved_size() const noexcept = 0;
         virtual span<operation> commands() noexcept = 0;
-        virtual void set_cursor(cursor cursor) noexcept = 0;
         [[nodiscard]] virtual float step(uid id, float dest) = 0;
         [[nodiscard]] virtual std::pmr::memory_resource* memory_resource() const noexcept = 0;
         [[nodiscard]] virtual vec2 calculate_bounds(const primitive& primitive) const = 0;
         [[nodiscard]] virtual uid region_sub_uid() = 0;
         [[nodiscard]] virtual input_backend& input_backend() const noexcept = 0;
+        [[nodiscard]] virtual bool region_request_focus(bool force) = 0;
     };
 }  // namespace animgui

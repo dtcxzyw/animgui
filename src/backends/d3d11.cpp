@@ -164,7 +164,6 @@ namespace animgui {
 
     class d3d11_backend final : public render_backend {
         std::pmr::vector<command> m_command_list;
-        animgui::cursor m_cursor;
         ID3D11Device* m_device;
         ID3D11DeviceContext* m_device_context;
         std::function<void(long)> m_error_checker;
@@ -284,8 +283,7 @@ namespace animgui {
 
     public:
         d3d11_backend(ID3D11Device* device, ID3D11DeviceContext* device_context, std::function<void(long)> error_checker)
-            : m_cursor{ cursor::arrow }, m_device{ device }, m_device_context{ device_context }, m_error_checker{ std::move(
-                                                                                                     error_checker) } {
+            : m_device{ device }, m_device_context{ device_context }, m_error_checker{ std::move(error_checker) } {
 
             {
                 ID3DBlob* vertex_shader_blob;
@@ -397,12 +395,6 @@ namespace animgui {
                 auto&& clip = command.clip;
                 std::visit([&](auto&& item) { emit(item, clip, screen_size); }, command.desc);
             }
-        }
-        void set_cursor(const animgui::cursor cursor) noexcept override {
-            m_cursor = cursor;
-        }
-        [[nodiscard]] animgui::cursor cursor() const noexcept override {
-            return m_cursor;
         }
         std::shared_ptr<texture> create_texture(uvec2 size, channel channels) override {
             return std::make_shared<texture_impl>(m_device, m_device_context, channels, size, m_error_checker);

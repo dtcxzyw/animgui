@@ -214,6 +214,9 @@ namespace animgui {
         vec2 m_mouse_move;
         vec2 m_scroll;
         bool m_key_state[256];
+        input_mode m_input_mode;
+        cursor m_cursor;
+        std::unordered_map<cursor, GLFWcursor*> m_cursors;
 
         game_pad_state m_game_pad_state[GLFW_JOYSTICK_LAST + 1];
         std::vector<size_t> m_available_game_pad;
@@ -225,11 +228,13 @@ namespace animgui {
             m_key_state[static_cast<uint32_t>(cast_key_code(key))] = state;
         }
         void cursor_event(const vec2 pos) {
+            m_input_mode = input_mode::mouse;
             m_mouse_move.x += pos.x - m_cursor_pos.x;
             m_mouse_move.y += pos.y - m_cursor_pos.y;
             m_cursor_pos = pos;
         }
         void scroll_event(const vec2 offset) {
+            m_input_mode = input_mode::mouse;
             m_scroll.x += offset.x;
             m_scroll.y += offset.y;
         }
@@ -240,7 +245,7 @@ namespace animgui {
     public:
         explicit glfw3_backend(GLFWwindow* window, const std::function<void()>& redraw)
             : m_window{ window }, m_cursor_pos{ 0.0f, 0.0f }, m_mouse_move{ 0.0f, 0.0f }, m_scroll{ 0.0f, 0.0f }, m_key_state{},
-              m_game_pad_state{}, m_redraw{ redraw } {
+              m_input_mode{ input_mode::mouse }, m_cursor{ cursor::arrow }, m_game_pad_state{}, m_redraw{ redraw } {
             m_available_game_pad.reserve(std::size(m_game_pad_state));
             glfwSetWindowUserPointer(m_window, this);
             glfwSetCharCallback(m_window, [](GLFWwindow* const win, const unsigned int cp) {
@@ -264,7 +269,18 @@ namespace animgui {
             glfwSetWindowRefreshCallback(m_window, [](GLFWwindow* const win) {
                 static_cast<glfw3_backend*>(glfwGetWindowUserPointer(win))->refresh_event();
             });
+            m_cursors[cursor::arrow] = nullptr;
+            m_cursors[cursor::cross_hair] = glfwCreateStandardCursor(GLFW_CROSSHAIR_CURSOR);
+            m_cursors[cursor::edit] = glfwCreateStandardCursor(GLFW_IBEAM_CURSOR);
+            m_cursors[cursor::hand] = glfwCreateStandardCursor(GLFW_HAND_CURSOR);
+            m_cursors[cursor::horizontal] = glfwCreateStandardCursor(GLFW_HRESIZE_CURSOR);
+            m_cursors[cursor::vertical] = glfwCreateStandardCursor(GLFW_VRESIZE_CURSOR);
         }
+        ~glfw3_backend() override {
+            for(auto [_, cursor] : m_cursors)
+                glfwDestroyCursor(cursor);
+        }
+
         std::pmr::string get_clipboard_text() override {
             return glfwGetClipboardString(nullptr);
         }
@@ -306,6 +322,9 @@ namespace animgui {
             return m_scroll;
         }
         void new_frame() override {
+            glfwSetCursor(m_window, m_cursors[m_cursor]);
+
+            m_cursor = cursor::arrow;
             m_mouse_move = m_scroll = { 0.0f, 0.0f };
             m_available_game_pad.clear();
             const auto flush = [](float& x) { x = std::fabs(x) < game_pad_axis_eps ? 0.0f : x; };
@@ -319,6 +338,14 @@ namespace animgui {
                         flush(state->axes[j]);
                     m_available_game_pad.push_back(i);
                 }
+                if(m_input_mode != input_mode::game_pad) {
+                    auto beg = reinterpret_cast<uint8_t*>(&m_game_pad_state[i]);
+                    for(const auto end = beg + sizeof(game_pad_state); beg != end; ++beg)
+                        if(*beg) {
+                            m_input_mode = input_mode::game_pad;
+                            break;
+                        }
+                }
             }
         }
         [[nodiscard]] std::pmr::string get_game_pad_name(const size_t idx) const override {
@@ -329,6 +356,13 @@ namespace animgui {
         }
         [[nodiscard]] span<const size_t> list_game_pad() const noexcept override {
             return { m_available_game_pad.data(), m_available_game_pad.data() + m_available_game_pad.size() };
+        }
+        [[nodiscard]] input_mode get_input_mode() const noexcept override {
+            return m_input_mode;
+        }
+        void set_cursor(const cursor cursor) noexcept override {
+            if(m_cursor == cursor::arrow)
+                m_cursor = cursor;
         }
     };
 
