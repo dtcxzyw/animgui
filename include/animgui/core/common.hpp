@@ -32,24 +32,31 @@ namespace animgui {
     };
     struct vec2 final {
         float x, y;
+        constexpr vec2 operator+(const vec2 rhs) const noexcept {
+            return { x + rhs.x, y + rhs.y };
+        }
     };
     struct uvec2 final {
         uint32_t x, y;
     };
     struct bounds final {
         float left, right, top, bottom;
+
+        [[nodiscard]] constexpr vec2 size() const noexcept {
+            return { right - left, bottom - top };
+        }
     };
-    inline void merge_bounds(bounds& sub, const bounds& parent) {
-        sub.left += parent.left;
-        sub.right += parent.left;
-        sub.top += parent.top;
-        sub.bottom += parent.top;
+    inline void offset_bounds(bounds& sub, const vec2 offset) {
+        sub.left += offset.x;
+        sub.right += offset.x;
+        sub.top += offset.y;
+        sub.bottom += offset.y;
     }
-    inline bool clip_bounds(bounds& sub, const bounds& parent) {
-        sub.left += parent.left;
-        sub.right += parent.left;
-        sub.top += parent.top;
-        sub.bottom += parent.top;
+    inline bool clip_bounds(bounds& sub, const vec2 offset, const bounds& parent) {
+        offset_bounds(sub, offset);
+
+        sub.left = std::max(sub.left, parent.left);
+        sub.top = std::max(sub.top, parent.top);
         sub.right = std::min(sub.right, parent.right);
         sub.bottom = std::min(sub.bottom, parent.bottom);
         return sub.left < sub.right && sub.top < sub.bottom;

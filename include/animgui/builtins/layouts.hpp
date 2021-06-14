@@ -13,7 +13,7 @@ namespace animgui {
 
     public:
         explicit layout_proxy(canvas& parent) noexcept : m_parent{ parent }, m_offset{ parent.commands().size() } {}
-        [[nodiscard]] vec2 reserved_size() const noexcept override;
+        [[nodiscard]] vec2 reserved_size() const noexcept final;
         void* raw_storage(size_t hash, uid uid) final;
         [[nodiscard]] const bounds& region_bounds() const override;
         [[nodiscard]] bool region_hovered() const override;
@@ -25,12 +25,13 @@ namespace animgui {
         std::pair<size_t, uid> add_primitive(uid uid, primitive primitive) override;
         void set_cursor(cursor cursor) noexcept final;
         float step(uid id, float dest) final;
-        animgui::style& style() noexcept final;
+        [[nodiscard]] const animgui::style& style() const noexcept final;
         [[nodiscard]] vec2 calculate_bounds(const primitive& primitive) const final;
         span<operation> commands() noexcept final;
         [[nodiscard]] bool hovered(const bounds& bounds) const override;
         [[nodiscard]] std::pmr::memory_resource* memory_resource() const noexcept final;
         uid region_sub_uid() override;
+        animgui::input_backend& input_backend() const noexcept override;
     };
 
     // TODO: indent/separate
@@ -48,10 +49,24 @@ namespace animgui {
     class window_canvas : public layout_proxy {
     public:
         explicit window_canvas(canvas& parent) noexcept : layout_proxy{ parent } {}
-        virtual void new_menu_item(const std::function<void(canvas&)>& render_function) = 0;
     };
 
-    enum class window_attributes : uint32_t { movable = 1 << 0, resizable = 1 << 1, closable = 1 << 2, minimizable = 1 << 3 };
+    enum class window_attributes : uint32_t {
+        movable = 1 << 0,
+        resizable = 1 << 1,
+        closable = 1 << 2,
+        minimizable = 1 << 3,
+        no_title_bar = 1 << 4,
+        maximizable = 1 << 5
+    };
+    constexpr window_attributes operator|(window_attributes lhs, window_attributes rhs) {
+        return static_cast<window_attributes>(static_cast<uint32_t>(lhs) | static_cast<uint32_t>(rhs));
+    }
+    constexpr bool has_attribute(window_attributes attributes, window_attributes query) {
+        return static_cast<uint32_t>(attributes) & static_cast<uint32_t>(query);
+    }
+    ANIMGUI_API void single_window(canvas& parent, std::optional<std::pmr::string> title, window_attributes attributes,
+                                   const std::function<void(window_canvas&)>& render_function);
 
     class multiple_window_canvas : public layout_proxy {
     public:

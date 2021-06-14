@@ -5,6 +5,7 @@
 #include <optional>
 
 namespace animgui {
+    class input_backend;
     enum class key_code : uint32_t;
     struct style;
     using raw_callback = void (*)(void*, size_t);
@@ -22,7 +23,7 @@ namespace animgui {
         virtual std::pair<size_t, uid> push_region(uid uid, const std::optional<bounds>& reserved_bounds = std::nullopt) = 0;
         virtual void pop_region(const std::optional<bounds>& new_bounds = std::nullopt) = 0;
         virtual std::pair<size_t, uid> add_primitive(uid uid, primitive primitive) = 0;
-        virtual style& style() noexcept = 0;
+        [[nodiscard]] virtual const style& style() const noexcept = 0;
         virtual void* raw_storage(size_t hash, uid uid) = 0;
         virtual void register_type(size_t hash, size_t size, size_t alignment, raw_callback ctor, raw_callback dtor) = 0;
         template <typename T>
@@ -49,5 +50,6 @@ namespace animgui {
         [[nodiscard]] virtual std::pmr::memory_resource* memory_resource() const noexcept = 0;
         [[nodiscard]] virtual vec2 calculate_bounds(const primitive& primitive) const = 0;
         [[nodiscard]] virtual uid region_sub_uid() = 0;
+        [[nodiscard]] virtual input_backend& input_backend() const noexcept = 0;
     };
 }  // namespace animgui

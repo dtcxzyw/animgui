@@ -50,7 +50,7 @@ namespace animgui {
     };
 
     struct extended_callback final {
-        std::function<void(const bounds&, std::pmr::vector<command>&, const style&,
+        std::function<void(const bounds&, vec2, std::pmr::vector<command>&, const style&,
                            const std::function<texture_region(font&, glyph)>&)>
             emitter;
         vec2 bounds;

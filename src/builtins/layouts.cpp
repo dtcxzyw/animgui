@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 
 #include <animgui/builtins/layouts.hpp>
+#include <animgui/builtins/widgets.hpp>
+#include <animgui/core/input_backend.hpp>
 #include <animgui/core/style.hpp>
 
 namespace animgui {
@@ -44,7 +46,7 @@ namespace animgui {
         return { idx - m_offset, id };
     }
 
-    animgui::style& layout_proxy::style() noexcept {
+    const animgui::style& layout_proxy::style() const noexcept {
         return m_parent.style();
     }
     bool layout_proxy::hovered(const bounds& bounds) const {
@@ -61,6 +63,9 @@ namespace animgui {
     }
     uid layout_proxy::region_sub_uid() {
         return m_parent.region_sub_uid();
+    }
+    animgui::input_backend& layout_proxy::input_backend() const noexcept {
+        return m_parent.input_backend();
     }
 
     class row_layout_canvas_impl final : public row_layout_canvas {
@@ -164,20 +169,117 @@ namespace animgui {
         return bounds;
     }
 
-    class panel_canvas final : public layout_proxy {
+    // TODO: scroll
+    ANIMGUI_API void panel(canvas& parent, const vec2 size, const std::function<void(canvas&)>& render_function) {
+        const bounds bounds{ 0.0f, size.x, 0.0f, size.y };
+        parent.push_region(parent.region_sub_uid(), bounds);
+        parent.add_primitive(parent.region_sub_uid(), canvas_stroke_rect{ bounds, parent.style().highlight_color, 5.0f });
+        render_function(parent);
+        parent.pop_region();
+    }
+
+    class window_operator {
+    public:
+        window_operator() = default;
+        virtual ~window_operator() = default;
+        window_operator(const window_operator& rhs) = delete;
+        window_operator(window_operator&& rhs) = default;
+        window_operator& operator=(const window_operator& rhs) = delete;
+        window_operator& operator=(window_operator&& rhs) = default;
+
+        virtual void close() = 0;
+        virtual void minimize() = 0;
+        virtual void maximize() = 0;
+        virtual void move(vec2 delta) = 0;
+    };
+
+    class window_canvas_impl final : public window_canvas {
+        window_attributes m_attributes;
+        window_operator& m_operator;
         vec2 m_size;
 
     public:
-        panel_canvas(canvas& parent, const vec2 size) : layout_proxy{ parent }, m_size{ size } {}
-        [[nodiscard]] vec2 reserved_size() const noexcept override {
-            return m_size;
+        window_canvas_impl(canvas& parent, const bounds& bounds, std::optional<std::pmr::string> title,
+                           const window_attributes attributes, window_operator& operator_)
+            : window_canvas{ parent }, m_attributes{ attributes }, m_operator{ operator_ }, m_size{ bounds.size() } {
+            layout_proxy::push_region("window"_id, bounds);
+            layout_proxy::add_primitive("window_bounds"_id,
+                                        canvas_stroke_rect{ { 0.0f, m_size.x, 0.0f, m_size.y }, style().highlight_color, 5.0f });
+            const auto height = style().font->height() * 1.1f;
+            if(!has_attribute(m_attributes, window_attributes::no_title_bar)) {
+                const animgui::bounds bar{ 0.0f, m_size.x, 0.0f, height };
+                layout_proxy::push_region("title_bar"_id, bar);
+                if(layout_proxy::region_pressed(key_code::left_button)) {
+                    m_operator.move(layout_proxy::input_backend().mouse_move());
+                }
+                layout_proxy::add_primitive("background"_id, canvas_fill_rect{ bar, style().background_color });
+                if(title.has_value())
+                    layout_row(*this, row_alignment::left,
+                               [&](row_layout_canvas& canvas) { text(canvas, std::move(title.value())); });
+                layout_row(*this, row_alignment::right, [&](row_layout_canvas& canvas) {
+                    if(has_attribute(attributes, window_attributes::minimizable)) {
+                        if(button_label(canvas, "\u2501"))
+                            m_operator.minimize();
+                    }
+                    if(has_attribute(attributes, window_attributes::minimizable)) {
+                        if(button_label(canvas, "\u25A1"))
+                            m_operator.maximize();
+                    }
+                    if(has_attribute(attributes, window_attributes::closable)) {
+                        if(button_label(canvas, "X"))
+                            m_operator.close();
+                    }
+                });
+                layout_proxy::pop_region(std::nullopt);
+                const auto padding = style().padding;
+                layout_proxy::push_region(
+                    "content"_id, animgui::bounds{ padding.x, m_size.x - padding.x, height + padding.y, m_size.y - padding.y });
+            }
+        }
+        void finish() {
+            // content
+            if(!has_attribute(m_attributes, window_attributes::no_title_bar))
+                pop_region(std::nullopt);
+            // window
+            pop_region(std::nullopt);
         }
     };
 
-    ANIMGUI_API void panel(canvas& parent, const vec2 size, const std::function<void(canvas&)>& render_function) {
-        parent.push_region(parent.region_sub_uid(), bounds{ 0.0f, size.x, 0.0f, size.y });
-        panel_canvas canvas{ parent, size };
+    class native_window_operator final : public window_operator {
+        input_backend& m_input_backend;
+        vec2 m_accumulate_delta;
+
+    public:
+        native_window_operator(input_backend& input_backend)
+            : m_input_backend{ input_backend }, m_accumulate_delta{ 0.0f, 0.0f } {}
+        void close() override {
+            m_input_backend.close_window();
+        }
+        void minimize() override {
+            m_input_backend.minimize_window();
+        }
+        void maximize() override {
+            m_input_backend.maximize_window();
+        }
+        void move(const vec2 delta) override {
+            m_accumulate_delta.x += delta.x;
+            m_accumulate_delta.y += delta.y;
+            if(std::fabs(m_accumulate_delta.x) > 1.0f || std::fabs(m_accumulate_delta.y) > 1.0f) {
+                const auto dx = std::copysign(std::floor(std::fabs(m_accumulate_delta.x)), m_accumulate_delta.x);
+                const auto dy = std::copysign(std::floor(std::fabs(m_accumulate_delta.y)), m_accumulate_delta.y);
+                m_accumulate_delta.x -= dx;
+                m_accumulate_delta.y -= dy;
+                m_input_backend.move_window(static_cast<int32_t>(dx), static_cast<int32_t>(dy));
+            }
+        }
+    };
+
+    ANIMGUI_API void single_window(canvas& parent, std::optional<std::pmr::string> title, const window_attributes attributes,
+                                   const std::function<void(window_canvas&)>& render_function) {
+        native_window_operator operator_{ parent.input_backend() };
+        const auto size = parent.reserved_size();
+        window_canvas_impl canvas{ parent, { 0.0f, size.x, 0.0f, size.y }, std::move(title), attributes, operator_ };
         render_function(canvas);
-        parent.pop_region();
+        canvas.finish();
     }
 }  // namespace animgui

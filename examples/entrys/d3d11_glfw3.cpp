@@ -4,6 +4,8 @@
 #include "../application.hpp"
 #include <GLFW/glfw3.h>
 #define GLFW_EXPOSE_NATIVE_WIN32
+#include "animgui/core/input_backend.hpp"
+
 #include <GLFW/glfw3native.h>
 #include <animgui/backends/d3d11.hpp>
 #include <animgui/backends/glfw3.hpp>
@@ -35,10 +37,14 @@ int main() {
 
     glfwDefaultWindowHints();
     glfwWindowHint(GLFW_VISIBLE, GLFW_TRUE);
+    glfwWindowHint(GLFW_DECORATED, GLFW_FALSE);
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
 
     int w = 800, h = 600;
     GLFWwindow* const window = glfwCreateWindow(w, h, "Animgui demo ( d3d11_glfw3 )", nullptr, nullptr);
+    int screen_w, screen_h;
+    glfwGetMonitorWorkarea(glfwGetPrimaryMonitor(), nullptr, nullptr, &screen_w, &screen_h);
+    glfwSetWindowPos(window, (screen_w - w) / 2, (screen_h - h) / 2);
 
     D3D_FEATURE_LEVEL levels[] = { D3D_FEATURE_LEVEL_11_1, D3D_FEATURE_LEVEL_11_0 };
     DXGI_SWAP_CHAIN_DESC swap_chain_desc{ { static_cast<uint32_t>(800),
@@ -128,6 +134,7 @@ int main() {
         };
 
         while(!glfwWindowShouldClose(window)) {
+            glfw3_backend->new_frame();  // clear state
             glfwPollEvents();
             draw();
         }

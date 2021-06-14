@@ -106,22 +106,33 @@ namespace animgui {
                     std::forward_as_tuple(m_state_storage.get_allocator().resource(), size, alignment, ctor, dtor));
         }
     };
+    struct region_info final {
+        size_t push_command_idx;
+        uid uid;
+        std::minstd_rand random_engine;
+        bounds absolute_bounds;
+        vec2 offset;
+
+        region_info() = delete;
+    };
+
     class canvas_impl final : public canvas {
         context& m_context;
         vec2 m_size;
-        input_backend& m_input_backend;
+        animgui::input_backend& m_input_backend;
         step_function m_step_function;
         emitter& m_emitter;
         state_manager& m_state_manager;
         std::pmr::memory_resource* m_memory_resource;
         cursor m_cursor;
         std::pmr::vector<operation> m_commands;
-        stack<std::tuple<size_t, uid, std::minstd_rand, bounds>> m_region_stack;
+        std::pmr::deque<region_info> m_region_stack;
         size_t m_animation_state_hash;
 
     public:
-        canvas_impl(context& context, const vec2 size, input_backend& input_backend, animator& animator, const float delta_t,
-                    emitter& emitter, state_manager& state_manager, std::pmr::memory_resource* memory_resource)
+        canvas_impl(context& context, const vec2 size, animgui::input_backend& input_backend, animator& animator,
+                    const float delta_t, emitter& emitter, state_manager& state_manager,
+                    std::pmr::memory_resource* memory_resource)
             : m_context{ context }, m_size{ size }, m_input_backend{ input_backend },
               m_step_function{ animator.step(delta_t) }, m_emitter{ emitter }, m_state_manager{ state_manager },
               m_memory_resource{ memory_resource }, m_cursor{ cursor::arrow }, m_commands{ m_memory_resource },
@@ -130,11 +141,13 @@ namespace animgui {
             m_animation_state_hash = hash;
             m_state_manager.register_type(
                 hash, state_size, alignment, [](void*, size_t) {}, [](void*, size_t) {});
-            m_region_stack.push(std::make_tuple(std::numeric_limits<size_t>::max(), uid{ 0 },
-                                                std::minstd_rand{},  // NOLINT(cert-msc51-cpp)
-                                                bounds{ 0.0f, size.x, 0.0f, size.y }));
+            m_region_stack.push_back({ std::numeric_limits<size_t>::max(),
+                                       uid{ 0 },
+                                       std::minstd_rand{},  // NOLINT(cert-msc51-cpp)
+                                       bounds{ 0.0f, size.x, 0.0f, size.y },
+                                       { 0.0f, 0.0f } });
         }
-        animgui::style& style() noexcept override {
+        [[nodiscard]] const animgui::style& style() const noexcept override {
             return m_context.style();
         }
         [[nodiscard]] void* raw_storage(const size_t hash, const uid uid) override {
@@ -144,6 +157,14 @@ namespace animgui {
             return { m_commands.data(), m_commands.data() + m_commands.size() };
         }
         [[nodiscard]] vec2 reserved_size() const noexcept override {
+            for(auto iter = m_region_stack.rbegin(); iter != m_region_stack.rend(); ++iter) {
+                const auto idx = iter->push_command_idx;
+                if(idx == std::numeric_limits<size_t>::max())
+                    break;
+                if(const auto size = std::get<animgui::push_region>(m_commands[idx]).bounds.size();
+                   size.x > 0.0f && size.y > 0.0f)
+                    return size;
+            }
             return m_size;
         }
         void register_type(const size_t hash, const size_t size, const size_t alignment, const raw_callback ctor,
@@ -152,24 +173,28 @@ namespace animgui {
         }
         void pop_region(const std::optional<bounds>& bounds) override {
             m_commands.push_back(animgui::pop_region{});
-            const auto idx = std::get<size_t>(m_region_stack.top());
-            const auto uid = std::get<animgui::uid>(m_region_stack.top());
-            m_region_stack.pop();
+            const auto& info = m_region_stack.back();
+            const auto idx = info.push_command_idx;
+            const auto uid = info.uid;
+            m_region_stack.pop_back();
             auto&& current_bounds = std::get<animgui::push_region>(m_commands[idx]).bounds;
             if(bounds.has_value())
                 current_bounds = bounds.value();
             storage<animgui::bounds>(mix(uid, "last_bounds"_id)) = current_bounds;
         }
         [[nodiscard]] uid current_region_uid() const {
-            return std::get<uid>(m_region_stack.top());
+            return m_region_stack.back().uid;
         }
         std::pair<size_t, uid> push_region(const uid uid, const std::optional<bounds>& bounds) override {
             const auto idx = m_commands.size();
             m_commands.push_back(animgui::push_region{ bounds.value_or(animgui::bounds{ 0.0f, 0.0f, 0.0f, 0.0f }) });
             const auto mixed = mix(current_region_uid(), uid);
             auto last_bounds = storage<animgui::bounds>(mix(mixed, "last_bounds"_id));
-            clip_bounds(last_bounds, std::get<animgui::bounds>(m_region_stack.top()));
-            m_region_stack.emplace(idx, mixed, std::minstd_rand{ static_cast<unsigned>(mixed.id) }, last_bounds);
+            const auto& parent = m_region_stack.back();
+            const vec2 offset{ last_bounds.left, last_bounds.top };
+            clip_bounds(last_bounds, parent.offset, parent.absolute_bounds);
+            m_region_stack.push_back(
+                { idx, mixed, std::minstd_rand{ static_cast<unsigned>(mixed.id) }, last_bounds, parent.offset + offset });
             return { idx, mixed };
         }
         [[nodiscard]] bool pressed(const key_code key, const bounds& bounds) const override {
@@ -179,7 +204,7 @@ namespace animgui {
             return pressed(key, region_bounds());
         }
         [[nodiscard]] const bounds& region_bounds() const override {
-            return std::get<bounds>(m_region_stack.top());
+            return m_region_stack.back().absolute_bounds;
         }
         [[nodiscard]] bool region_hovered() const override {
             return hovered(region_bounds());
@@ -211,7 +236,10 @@ namespace animgui {
             return m_emitter.calculate_bounds(primitive, m_context.style());
         }
         uid region_sub_uid() override {
-            return mix(current_region_uid(), uid{ std::get<std::minstd_rand>(m_region_stack.top())() });
+            return mix(current_region_uid(), uid{ m_region_stack.back().random_engine() });
+        }
+        [[nodiscard]] animgui::input_backend& input_backend() const noexcept override {
+            return m_input_backend;
         }
     };
 
@@ -448,7 +476,7 @@ namespace animgui {
         texture_region load_image(const image_desc& image) override {
             return m_image_compactor.compact(image);
         }
-        std::shared_ptr<font> load_font(const std::pmr::string& name, float height) const override {
+        [[nodiscard]] std::shared_ptr<font> load_font(const std::pmr::string& name, const float height) const override {
             return m_font_backend.load_font(name, height);
         }
     };

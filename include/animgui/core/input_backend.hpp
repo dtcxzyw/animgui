@@ -98,6 +98,15 @@ namespace animgui {
         max = 0xFF,
     };
 
+    struct game_pad_state final {
+        bool a, b, x, y, left_bumper, right_bumper, back, start, guide, left_thumb, right_thumb, d_pad_up, d_pad_right,
+            d_pad_down, d_pad_left;
+        vec2 left_axis;
+        vec2 right_axis;
+        float left_trigger;
+        float right_trigger;
+    };
+
     class input_backend {
     public:
         input_backend() = default;
@@ -112,6 +121,16 @@ namespace animgui {
 
         virtual vec2 get_cursor_pos() = 0;
         virtual bool get_key(key_code code) = 0;
-        // TODO: game pad & drop & scroll
+        virtual void close_window() = 0;
+        virtual void minimize_window() = 0;
+        virtual void maximize_window() = 0;
+        virtual void move_window(int32_t dx, int32_t dy) = 0;
+        [[nodiscard]] virtual vec2 mouse_move() const noexcept = 0;
+        [[nodiscard]] virtual vec2 scroll() const noexcept = 0;
+        virtual void new_frame() = 0;
+        [[nodiscard]] virtual std::pmr::string get_game_pad_name(size_t idx) const = 0;
+        [[nodiscard]] virtual span<const size_t> list_game_pad() const noexcept = 0;
+        [[nodiscard]] virtual const game_pad_state& get_game_pad_state(size_t idx) const noexcept = 0;
+        // TODO: drop
     };
 }  // namespace animgui

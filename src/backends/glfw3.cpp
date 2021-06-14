@@ -207,9 +207,17 @@ namespace animgui {
         }
     }
     class glfw3_backend final : public input_backend {
+        static constexpr auto game_pad_axis_eps = 0.05f;
+
         GLFWwindow* m_window;
         vec2 m_cursor_pos;
+        vec2 m_mouse_move;
+        vec2 m_scroll;
         bool m_key_state[256];
+
+        game_pad_state m_game_pad_state[GLFW_JOYSTICK_LAST + 1];
+        std::vector<size_t> m_available_game_pad;
+
         const std::function<void()>& m_redraw;
 
         void add_char(const uint32_t codepoint) {}
@@ -217,16 +225,23 @@ namespace animgui {
             m_key_state[static_cast<uint32_t>(cast_key_code(key))] = state;
         }
         void cursor_event(const vec2 pos) {
+            m_mouse_move.x += pos.x - m_cursor_pos.x;
+            m_mouse_move.y += pos.y - m_cursor_pos.y;
             m_cursor_pos = pos;
         }
-        void scroll_event(vec2 offset) {}
+        void scroll_event(const vec2 offset) {
+            m_scroll.x += offset.x;
+            m_scroll.y += offset.y;
+        }
         void refresh_event() const {
             m_redraw();
         }
 
     public:
         explicit glfw3_backend(GLFWwindow* window, const std::function<void()>& redraw)
-            : m_window{ window }, m_cursor_pos{ 0.0f, 0.0f }, m_key_state{}, m_redraw{ redraw } {
+            : m_window{ window }, m_cursor_pos{ 0.0f, 0.0f }, m_mouse_move{ 0.0f, 0.0f }, m_scroll{ 0.0f, 0.0f }, m_key_state{},
+              m_game_pad_state{}, m_redraw{ redraw } {
+            m_available_game_pad.reserve(std::size(m_game_pad_state));
             glfwSetWindowUserPointer(m_window, this);
             glfwSetCharCallback(m_window, [](GLFWwindow* const win, const unsigned int cp) {
                 static_cast<glfw3_backend*>(glfwGetWindowUserPointer(win))->add_char(cp);
@@ -261,6 +276,59 @@ namespace animgui {
         }
         void set_clipboard_text(const std::pmr::string& str) override {
             glfwSetClipboardString(nullptr, str.c_str());
+        }
+        void close_window() override {
+            glfwSetWindowShouldClose(m_window, GLFW_TRUE);
+        }
+        void minimize_window() override {
+            glfwIconifyWindow(m_window);
+        }
+        void maximize_window() override {
+            if(glfwGetWindowAttrib(m_window, GLFW_MAXIMIZED) == GLFW_TRUE)
+                glfwRestoreWindow(m_window);
+            else
+                glfwMaximizeWindow(m_window);
+        }
+        void move_window(const int32_t dx, const int32_t dy) override {
+            int32_t x, y;
+            glfwGetWindowPos(m_window, &x, &y);
+            x += dx;
+            y += dy;
+            m_mouse_move = { 0.0f, 0.0f };
+            m_cursor_pos.x -= static_cast<float>(dx);
+            m_cursor_pos.y -= static_cast<float>(dy);
+            glfwSetWindowPos(m_window, x, y);
+        }
+        [[nodiscard]] vec2 mouse_move() const noexcept override {
+            return m_mouse_move;
+        }
+        [[nodiscard]] vec2 scroll() const noexcept override {
+            return m_scroll;
+        }
+        void new_frame() override {
+            m_mouse_move = m_scroll = { 0.0f, 0.0f };
+            m_available_game_pad.clear();
+            const auto flush = [](float& x) { x = std::fabs(x) < game_pad_axis_eps ? 0.0f : x; };
+            for(int i = 0; i <= GLFW_JOYSTICK_LAST; ++i) {
+                if(!glfwJoystickPresent(i) || !glfwJoystickIsGamepad(i))
+                    continue;
+                // TODO: hats
+                static_assert(sizeof(game_pad_state) == sizeof(GLFWgamepadstate));
+                if(auto state = reinterpret_cast<GLFWgamepadstate*>(&m_game_pad_state[i]); glfwGetGamepadState(i, state)) {
+                    for(int j = 0; j < 4; ++j)
+                        flush(state->axes[j]);
+                    m_available_game_pad.push_back(i);
+                }
+            }
+        }
+        [[nodiscard]] std::pmr::string get_game_pad_name(const size_t idx) const override {
+            return glfwGetGamepadName(static_cast<int>(idx));
+        }
+        [[nodiscard]] const game_pad_state& get_game_pad_state(const size_t idx) const noexcept override {
+            return m_game_pad_state[idx];
+        }
+        [[nodiscard]] span<const size_t> list_game_pad() const noexcept override {
+            return { m_available_game_pad.data(), m_available_game_pad.data() + m_available_game_pad.size() };
         }
     };
 

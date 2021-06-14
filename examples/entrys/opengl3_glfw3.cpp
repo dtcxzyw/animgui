@@ -12,6 +12,7 @@
 #include <animgui/builtins/image_compactors.hpp>
 #include <animgui/builtins/layouts.hpp>
 #include <animgui/core/context.hpp>
+#include <animgui/core/input_backend.hpp>
 #include <iostream>
 #include <string>
 
@@ -108,6 +109,7 @@ int main() {
 
     glfwDefaultWindowHints();
     glfwWindowHint(GLFW_VISIBLE, GLFW_TRUE);
+    glfwWindowHint(GLFW_DECORATED, GLFW_FALSE);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 5);
     glfwWindowHint(GLFW_DEPTH_BITS, GL_FALSE);
@@ -119,7 +121,12 @@ int main() {
     glfwWindowHint(GLFW_DOUBLEBUFFER, GLFW_TRUE);
     glfwWindowHint(GLFW_SAMPLES, 8);
 
-    GLFWwindow* const window = glfwCreateWindow(800, 600, "Animgui demo ( opengl3_glfw3 )", nullptr, nullptr);
+    const int w = 800, h = 600;
+    GLFWwindow* const window = glfwCreateWindow(w, h, "Animgui demo ( opengl3_glfw3 )", nullptr, nullptr);
+    int screen_w, screen_h;
+    glfwGetMonitorWorkarea(glfwGetPrimaryMonitor(), nullptr, nullptr, &screen_w, &screen_h);
+    glfwSetWindowPos(window, (screen_w - w) / 2, (screen_h - h) / 2);
+
     glfwMakeContextCurrent(window);
 
     if(glewInit() != GLEW_OK)
@@ -173,6 +180,7 @@ int main() {
         };
 
         while(!glfwWindowShouldClose(window)) {
+            glfw3_backend->new_frame();  // clear state
             glfwPollEvents();
             draw();
         }
