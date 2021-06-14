@@ -35,6 +35,9 @@ namespace animgui {
         constexpr vec2 operator+(const vec2 rhs) const noexcept {
             return { x + rhs.x, y + rhs.y };
         }
+        constexpr vec2 operator-(const vec2 rhs) const noexcept {
+            return { x - rhs.x, y - rhs.y };
+        }
     };
     struct uvec2 final {
         uint32_t x, y;
@@ -63,6 +66,7 @@ namespace animgui {
     }
     struct uid final {
         uint64_t id;
+        constexpr uid() : id{ 0 } {}
         constexpr explicit uid(const uint64_t id) noexcept : id{ id } {}
         bool operator==(const uid rhs) const noexcept {
             return id == rhs.id;

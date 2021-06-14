@@ -109,7 +109,7 @@ namespace animgui {
         float right_trigger;
     };
 
-    enum class input_mode { auto_switch, mouse, game_pad };
+    enum class input_mode { mouse, game_pad };
 
     class input_backend {
     public:

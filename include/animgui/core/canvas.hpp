@@ -50,6 +50,6 @@ namespace animgui {
         [[nodiscard]] virtual vec2 calculate_bounds(const primitive& primitive) const = 0;
         [[nodiscard]] virtual uid region_sub_uid() = 0;
         [[nodiscard]] virtual input_backend& input_backend() const noexcept = 0;
-        [[nodiscard]] virtual bool region_request_focus(bool force) = 0;
+        [[nodiscard]] virtual bool region_request_focus(bool force = false) = 0;
     };
 }  // namespace animgui

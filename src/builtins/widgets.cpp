@@ -17,7 +17,7 @@ namespace animgui {
     }
     static bool button_with_content(canvas& canvas, const std::function<void(animgui::canvas&)>& render_function) {
         canvas.push_region(canvas.region_sub_uid());
-        const auto hovered = canvas.region_hovered();
+        const auto hovered = canvas.region_hovered() || canvas.region_request_focus();
         const auto pressed = canvas.region_pressed(key_code::left_button);
         auto [idx, uid] = canvas.add_primitive(
             "button_base"_id,

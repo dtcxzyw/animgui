@@ -207,7 +207,7 @@ namespace animgui {
         }
     }
     class glfw3_backend final : public input_backend {
-        static constexpr auto game_pad_axis_eps = 0.05f;
+        static constexpr auto game_pad_axis_eps = 0.08f;
 
         GLFWwindow* m_window;
         vec2 m_cursor_pos;
@@ -276,6 +276,11 @@ namespace animgui {
             m_cursors[cursor::horizontal] = glfwCreateStandardCursor(GLFW_HRESIZE_CURSOR);
             m_cursors[cursor::vertical] = glfwCreateStandardCursor(GLFW_VRESIZE_CURSOR);
         }
+
+        glfw3_backend(const glfw3_backend&) = delete;
+        glfw3_backend(glfw3_backend&&) = delete;
+        glfw3_backend& operator=(const glfw3_backend&) = delete;
+        glfw3_backend& operator=(glfw3_backend&&) = delete;
         ~glfw3_backend() override {
             for(auto [_, cursor] : m_cursors)
                 glfwDestroyCursor(cursor);
@@ -337,14 +342,19 @@ namespace animgui {
                     for(int j = 0; j < 4; ++j)
                         flush(state->axes[j]);
                     m_available_game_pad.push_back(i);
-                }
-                if(m_input_mode != input_mode::game_pad) {
-                    auto beg = reinterpret_cast<uint8_t*>(&m_game_pad_state[i]);
-                    for(const auto end = beg + sizeof(game_pad_state); beg != end; ++beg)
-                        if(*beg) {
+                    if(m_input_mode != input_mode::game_pad) {
+                        for(auto&& button : state->buttons)
+                            if(button == GLFW_PRESS) {
+                                m_input_mode = input_mode::game_pad;
+                                break;
+                            }
+                    }
+                    if(m_input_mode != input_mode::game_pad) {
+                        if(state->axes[0] != 0.0f || state->axes[1] != 0.0f || state->axes[2] != 0.0f || state->axes[3] != 0.0f ||
+                           std::fabs(state->axes[4] - -1.0f) > game_pad_axis_eps ||
+                           std::fabs(state->axes[5] - -1.0f) > game_pad_axis_eps)
                             m_input_mode = input_mode::game_pad;
-                            break;
-                        }
+                    }
                 }
             }
         }

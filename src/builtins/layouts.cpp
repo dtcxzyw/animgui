@@ -43,7 +43,7 @@ namespace animgui {
         return { idx - m_offset, id };
     }
     bool layout_proxy::region_request_focus(const bool force) {
-        return region_request_focus(force);
+        return m_parent.region_request_focus(force);
     }
 
     const style& layout_proxy::style() const noexcept {

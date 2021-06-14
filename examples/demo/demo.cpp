@@ -17,7 +17,7 @@ namespace animgui {
     public:
         explicit demo(context& context) : m_count{ 0 } {
             auto&& style = context.style();
-            style.font = context.load_font("msyh", 50.0f);
+            style.font = context.load_font("msyh", 30.0f);
         }
         void test_game_pad(row_layout_canvas& canvas) const {
             auto&& input_backend = canvas.input_backend();
@@ -74,6 +74,13 @@ namespace animgui {
                                       ++m_count;
                                   }
                                   layout.newline();
+
+                                  for(auto i = 0; i < 5; ++i) {
+                                      for(auto j = 0; j < 5; ++j)
+                                          button_label(layout, "B");
+                                      layout.newline();
+                                  }
+
                                   test_game_pad(layout);
                                   layout.newline();
                                   if(button_label(layout, "Exit")) {

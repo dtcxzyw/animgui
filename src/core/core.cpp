@@ -124,18 +124,20 @@ namespace animgui {
         emitter& m_emitter;
         state_manager& m_state_manager;
         std::pmr::memory_resource* m_memory_resource;
+        input_mode m_input_mode;
         std::pmr::vector<operation> m_commands;
         std::pmr::deque<region_info> m_region_stack;
         size_t m_animation_state_hash;
+        std::pmr::vector<std::pair<uid, vec2>> m_focusable_region;
 
     public:
         canvas_impl(context& context, const vec2 size, animgui::input_backend& input_backend, animator& animator,
                     const float delta_t, emitter& emitter, state_manager& state_manager,
                     std::pmr::memory_resource* memory_resource)
-            : m_context{ context }, m_size{ size }, m_input_backend{ input_backend },
-              m_step_function{ animator.step(delta_t) }, m_emitter{ emitter }, m_state_manager{ state_manager },
-              m_memory_resource{ memory_resource }, m_commands{ m_memory_resource },
-              m_region_stack{ m_memory_resource }, m_animation_state_hash{ 0 } {
+            : m_context{ context }, m_size{ size }, m_input_backend{ input_backend }, m_step_function{ animator.step(delta_t) },
+              m_emitter{ emitter }, m_state_manager{ state_manager }, m_memory_resource{ memory_resource },
+              m_input_mode{ input_backend.get_input_mode() }, m_commands{ m_memory_resource },
+              m_region_stack{ m_memory_resource }, m_animation_state_hash{ 0 }, m_focusable_region{ memory_resource } {
             const auto [hash, state_size, alignment] = animator.state_storage();
             m_animation_state_hash = hash;
             m_state_manager.register_type(
@@ -233,8 +235,82 @@ namespace animgui {
         [[nodiscard]] animgui::input_backend& input_backend() const noexcept override {
             return m_input_backend;
         }
-        bool region_request_focus(bool force) override {
-            return false;
+        bool region_request_focus(const bool force) override {
+            if(m_input_mode != input_mode::game_pad)
+                return false;
+            const auto bounds = m_region_stack.back().absolute_bounds;
+            const vec2 center = { (bounds.left + bounds.right) / 2.0f, (bounds.top + bounds.bottom) / 2.0f };
+            const auto current = current_region_uid();
+            m_focusable_region.push_back({ current, center });
+            uid& last_focus = storage<uid>("glabal_focus"_id);
+            if(force) {
+                last_focus = current;
+                return true;
+            }
+            return last_focus == current;
+        }
+        void finish() {
+            uid& last_focus = storage<uid>("glabal_focus"_id);
+            if(m_input_mode != input_mode::game_pad || m_focusable_region.empty()) {
+                last_focus = uid{ 0 };
+                return;
+            }
+            vec2 focus{ 0.0f, 0.0f };
+            bool lost_focus = true;
+            for(auto& [id, pos] : m_focusable_region) {
+                if(last_focus == id) {
+                    focus = pos;
+                    lost_focus = false;
+                    break;
+                }
+            }
+            if(lost_focus) {
+                const auto init =
+                    std::min_element(m_focusable_region.cbegin(), m_focusable_region.cend(), [](auto lhs, auto rhs) {
+                        return std::fabs(lhs.second.y - rhs.second.y) < 0.1f ? lhs.second.x < rhs.second.x :
+                                                                               lhs.second.y < rhs.second.y;
+                    });
+                focus = init->second;
+                last_focus = init->first;
+            }
+
+            // TODO: idx
+            const auto& axis = m_input_backend.get_game_pad_state(0);
+            auto dir = axis.left_axis;
+            using Clock = std::chrono::high_resolution_clock;
+            auto& last_move = storage<Clock::time_point>("last_game_pad_focus_move"_id);
+
+            if(dir.x * dir.x + dir.y * dir.y < 0.25f) {
+                last_move = {};
+                return;
+            }
+
+            const auto current = Clock::now();
+            using namespace std::chrono_literals;
+            if(last_move + 500ms > current)
+                return;
+
+            const auto norm = std::hypot(dir.x, dir.y);
+            dir.x /= norm;
+            dir.y /= norm;
+
+            auto min_dist = std::numeric_limits<float>::max();
+
+            for(auto& [id, pos] : m_focusable_region) {
+                if(id == last_focus)
+                    continue;
+
+                const auto diff = pos - focus;
+                const auto dot = diff.x * dir.x + diff.y * dir.y;
+                if(dot < 0.01f)
+                    continue;
+
+                if(const auto diameter = (diff.x * diff.x + diff.y * diff.y) / std::pow(dot, 1.4f); diameter < min_dist) {
+                    min_dist = diameter;
+                    last_focus = id;
+                    last_move = current;
+                }
+            }
         }
     };
 
@@ -455,11 +531,14 @@ namespace animgui {
         void new_frame(const uint32_t width, const uint32_t height, const float delta_t,
                        const std::function<void(canvas& canvas)>& render_function) override {
             std::pmr::monotonic_buffer_resource arena{ 1 << 15, m_memory_resource };
+
             canvas_impl canvas{ *this,           vec2{ static_cast<float>(width), static_cast<float>(height) },
                                 m_input_backend, m_animator,
                                 delta_t,         m_emitter,
                                 m_state_manager, &arena };
             render_function(canvas);
+            canvas.finish();
+
             auto commands = m_emitter.transform(
                 canvas.reserved_size(), canvas.commands(), m_style,
                 [&](font& font, const glyph glyph) -> texture_region { return m_codepoint_locator.locate(font, glyph); });
