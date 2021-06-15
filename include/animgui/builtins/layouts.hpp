@@ -49,6 +49,8 @@ namespace animgui {
     class window_canvas : public layout_proxy {
     public:
         explicit window_canvas(canvas& parent) noexcept : layout_proxy{ parent } {}
+        virtual void close() = 0;
+        virtual void focus() = 0;
     };
 
     enum class window_attributes : uint32_t {
@@ -73,6 +75,9 @@ namespace animgui {
         explicit multiple_window_canvas(canvas& parent) noexcept : layout_proxy{ parent } {}
         virtual void new_window(uid id, std::optional<std::pmr::string> title, window_attributes attributes,
                                 const std::function<void(window_canvas&)>& render_function) = 0;
+        virtual void close_window(uid id) = 0;
+        virtual void open_window(uid id) = 0;
+        virtual void focus_window(uid id) = 0;
     };
     ANIMGUI_API void multiple_window(canvas& parent, const std::function<void(multiple_window_canvas&)>& render_function);
     ANIMGUI_API void docking(canvas& parent, const std::function<void(multiple_window_canvas&)>& render_function);

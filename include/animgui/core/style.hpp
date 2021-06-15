@@ -10,6 +10,7 @@ namespace animgui {
     struct style {
         std::shared_ptr<font> font;
 
+        color panel_background_color;
         color background_color;
         color normal_color;
         color highlight_color;

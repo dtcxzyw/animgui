@@ -64,7 +64,7 @@ namespace animgui {
     uid layout_proxy::region_sub_uid() {
         return m_parent.region_sub_uid();
     }
-    animgui::input_backend& layout_proxy::input_backend() const noexcept {
+    input_backend& layout_proxy::input_backend() const noexcept {
         return m_parent.input_backend();
     }
 
@@ -188,6 +188,7 @@ namespace animgui {
         virtual void minimize() = 0;
         virtual void maximize() = 0;
         virtual void move(vec2 delta) = 0;
+        virtual void focus() = 0;
     };
 
     class window_canvas_impl final : public window_canvas {
@@ -200,19 +201,24 @@ namespace animgui {
                            const window_attributes attributes, window_operator& operator_)
             : window_canvas{ parent }, m_attributes{ attributes }, m_operator{ operator_ }, m_size{ bounds.size() } {
             layout_proxy::push_region("window"_id, bounds);
+
+            layout_proxy::add_primitive("window_background"_id,
+                                        canvas_fill_rect{ { 0.0f, m_size.x, 0.0f, m_size.y }, style().panel_background_color });
             layout_proxy::add_primitive("window_bounds"_id,
                                         canvas_stroke_rect{ { 0.0f, m_size.x, 0.0f, m_size.y }, style().highlight_color, 5.0f });
             const auto height = style().font->height() * 1.1f;
             if(!has_attribute(m_attributes, window_attributes::no_title_bar)) {
                 const animgui::bounds bar{ 0.0f, m_size.x, 0.0f, height };
                 const auto bar_uid = layout_proxy::push_region("title_bar"_id, bar).second;
+
                 bool& move = storage<bool>(bar_uid);
-                if(layout_proxy::region_pressed(key_code::left_button))
+                if(layout_proxy::region_pressed(key_code::left_button)) {
                     move = true;
-                else if(!layout_proxy::input_backend().get_key(key_code::left_button))
+                    m_operator.focus();
+                } else if(!layout_proxy::input_backend().get_key(key_code::left_button))
                     move = false;
 
-                if(move)
+                if(move && has_attribute(m_attributes, window_attributes::movable))
                     m_operator.move(layout_proxy::input_backend().mouse_move());
 
                 layout_proxy::add_primitive("background"_id, canvas_fill_rect{ bar, style().background_color });
@@ -224,7 +230,7 @@ namespace animgui {
                         if(button_label(canvas, "\u2501"))
                             m_operator.minimize();
                     }
-                    if(has_attribute(attributes, window_attributes::minimizable)) {
+                    if(has_attribute(attributes, window_attributes::maximizable)) {
                         if(button_label(canvas, "\u25A1"))
                             m_operator.maximize();
                     }
@@ -238,6 +244,12 @@ namespace animgui {
                 layout_proxy::push_region(
                     "content"_id, animgui::bounds{ padding.x, m_size.x - padding.x, height + padding.y, m_size.y - padding.y });
             }
+        }
+        void close() override {
+            m_operator.close();
+        }
+        void focus() override {
+            m_operator.focus();
         }
         void finish() {
             // content
@@ -275,13 +287,193 @@ namespace animgui {
                 m_input_backend.move_window(static_cast<int32_t>(dx), static_cast<int32_t>(dy));
             }
         }
+        void focus() override {
+            m_input_backend.focus_window();
+        }
     };
 
     ANIMGUI_API void single_window(canvas& parent, std::optional<std::pmr::string> title, const window_attributes attributes,
                                    const std::function<void(window_canvas&)>& render_function) {
         native_window_operator operator_{ parent.input_backend() };
-        const auto size = parent.reserved_size();
-        window_canvas_impl canvas{ parent, { 0.0f, size.x, 0.0f, size.y }, std::move(title), attributes, operator_ };
+        const auto [x, y] = parent.reserved_size();
+        window_canvas_impl canvas{ parent, { 0.0f, x, 0.0f, y }, std::move(title), attributes, operator_ };
+        render_function(canvas);
+        canvas.finish();
+    }
+
+    class multiple_window_canvas_impl;
+
+    class multiple_window_operator final : public window_operator {
+        multiple_window_canvas_impl& m_canvas;
+        uid m_id;
+
+    public:
+        explicit multiple_window_operator(multiple_window_canvas_impl& canvas, const uid id) : m_canvas{ canvas }, m_id{ id } {}
+        void close() override;
+        void minimize() override {}
+        void maximize() override {}
+        void move(vec2 delta) override;
+        void focus() override;
+    };
+
+    struct windows_info final {
+        uid id;
+        bounds bounds;
+        bool is_open;
+        bool auto_adjust;
+        windows_info() = delete;
+    };
+
+    class multiple_window_canvas_impl final : public multiple_window_canvas {
+        std::pmr::unordered_map<uid, std::pair<size_t, size_t>, uid_hasher> m_ranges;
+        std::pmr::vector<uid> m_focus_requests;
+        std::pmr::vector<uid> m_open_requests;
+        std::pmr::vector<uid> m_close_requests;
+        std::pmr::vector<std::pair<uid, vec2>> m_move_requests;
+        std::pmr::vector<windows_info>& m_info;
+
+        [[nodiscard]] bounds default_bounds() const {
+            const auto size = reserved_size();
+            const auto cnt = static_cast<float>(m_info.size());
+            return { cnt * style().spacing.x, size.x, cnt * style().spacing.y, size.y };
+        }
+
+        [[nodiscard]] windows_info& locate_window(const uid id) const {
+            for(auto&& win : m_info)
+                if(win.id == id)
+                    return win;
+            m_info.push_back({ id, default_bounds(), true, true });
+            return m_info.front();
+        }
+
+    public:
+        explicit multiple_window_canvas_impl(canvas& parent)
+            : multiple_window_canvas{ parent }, m_ranges{ parent.memory_resource() },
+              m_focus_requests{ parent.memory_resource() }, m_open_requests{ parent.memory_resource() },
+              m_close_requests{ parent.memory_resource() }, m_move_requests{ parent.memory_resource() }, m_info{
+                  parent.storage<std::decay_t<decltype(m_info)>>(parent.region_sub_uid())
+              } {}
+        void new_window(const uid id, std::optional<std::pmr::string> title, const window_attributes attributes,
+                        const std::function<void(window_canvas&)>& render_function) override {
+            if(auto& [_, bounds, is_open, auto_adjust] = locate_window(id); is_open) {
+                multiple_window_operator operator_{ *this, id };
+                const auto beg = commands().size();
+
+                const auto size = reserved_size();
+                push_region(id, animgui::bounds{ 0.0f, size.x, 0.0f, size.y });
+                window_canvas_impl canvas{ *this, bounds, std::move(title), attributes, operator_ };
+                render_function(canvas);
+                canvas.finish();
+                pop_region(std::nullopt);
+
+                const auto end = commands().size();
+                m_ranges[id] = { beg, end };
+                if(auto_adjust) {
+                    std::pmr::vector<vec2> offset{ { { 0.0f, 0.0f } }, memory_resource() };
+                    animgui::bounds content_bounds{ 0.0f, 0.0f, 0.0f, 0.0f };
+                    for(size_t idx = beg; idx < end; ++idx) {
+                        // ReSharper disable once CppDefaultCaseNotHandledInSwitchStatement
+                        switch(const auto& cmd = commands()[idx]; cmd.index()) {
+                            case 0: {
+                                const auto& sub_bounds = std::get<animgui::push_region>(cmd).bounds;
+                                const auto current = offset.back();
+                                content_bounds.left = std::fmin(content_bounds.left, sub_bounds.left + current.x);
+                                content_bounds.right = std::fmax(content_bounds.right, sub_bounds.right + current.x);
+                                content_bounds.top = std::fmin(content_bounds.top, sub_bounds.top + current.y);
+                                content_bounds.bottom = std::fmax(content_bounds.bottom, sub_bounds.bottom + current.y);
+                                offset.push_back({ current.x + sub_bounds.left, current.y + sub_bounds.top });
+                            } break;
+                            case 1: {
+                                offset.pop_back();
+                            } break;
+                        }
+                    }
+                    bounds.right = bounds.left + content_bounds.right - content_bounds.left;
+                    bounds.bottom = bounds.top + content_bounds.bottom - content_bounds.top;
+                    auto_adjust = false;
+                }
+            }
+        }
+        void close_window(const uid id) override {
+            m_close_requests.push_back(id);
+        }
+        void move_window(const uid id, const vec2 delta) {
+            m_move_requests.push_back({ id, delta });
+        }
+        void open_window(const uid id) override {
+            m_open_requests.push_back(id);
+            m_focus_requests.push_back(id);
+        }
+        void focus_window(const uid id) override {
+            m_focus_requests.push_back(id);
+        }
+        void finish() {
+            for(auto&& id : m_focus_requests) {
+                for(auto iter = m_info.begin(); iter != m_info.end(); ++iter) {
+                    if(iter->id == id) {
+                        while(true) {
+                            const auto next = std::next(iter);
+                            if(next == m_info.end())
+                                break;
+                            std::iter_swap(next, iter);
+                            iter = next;
+                        }
+                        break;
+                    }
+                }
+            }
+            for(auto&& id : m_close_requests) {
+                for(auto& [uid, bounds, is_open, auto_adjust] : m_info)
+                    if(id == uid) {
+                        is_open = false;
+                        break;
+                    }
+            }
+            for(auto&& id : m_open_requests) {
+                for(auto& [uid, bounds, is_open, auto_adjust] : m_info)
+                    if(id == uid) {
+                        is_open = true;
+                        break;
+                    }
+            }
+            for(auto&& [id, delta] : m_move_requests) {
+                for(auto& [uid, bounds, is_open, auto_adjust] : m_info)
+                    if(id == uid) {
+                        bounds.left += delta.x;
+                        bounds.right += delta.x;
+                        bounds.top += delta.y;
+                        bounds.bottom += delta.y;
+                        break;
+                    }
+            }
+
+            const auto commands_range = commands();
+            std::pmr::vector<operation> new_commands;
+            new_commands.reserve(commands_range.size());
+            for(auto [id, bounds, is_open, _] : m_info) {
+                if(const auto iter = m_ranges.find(id); iter != m_ranges.cend()) {
+                    const auto [beg, end] = iter->second;
+                    new_commands.insert(new_commands.cend(), commands_range.begin() + beg, commands_range.begin() + end);
+                }
+            }
+            std::move(new_commands.begin(), new_commands.end(), commands_range.begin());
+        }
+    };
+
+    void multiple_window_operator::close() {
+        m_canvas.close_window(m_id);
+    }
+
+    void multiple_window_operator::focus() {
+        m_canvas.focus_window(m_id);
+    }
+
+    void multiple_window_operator::move(const vec2 delta) {
+        m_canvas.move_window(m_id, delta);
+    }
+
+    ANIMGUI_API void multiple_window(canvas& parent, const std::function<void(multiple_window_canvas&)>& render_function) {
+        multiple_window_canvas_impl canvas{ parent };
         render_function(canvas);
         canvas.finish();
     }

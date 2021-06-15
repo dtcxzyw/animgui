@@ -106,6 +106,7 @@ namespace animgui {
 
         void generate_mipmap() override {
             if(m_dirty) {
+                glBindTexture(GL_TEXTURE_2D, m_id);
                 glGenerateMipmap(GL_TEXTURE_2D);
                 m_dirty = false;
             }

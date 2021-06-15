@@ -136,7 +136,8 @@ namespace animgui {
         [[nodiscard]] virtual span<const size_t> list_game_pad() const noexcept = 0;
         [[nodiscard]] virtual const game_pad_state& get_game_pad_state(size_t idx) const noexcept = 0;
         [[nodiscard]] virtual input_mode get_input_mode() const noexcept = 0;
-        [[nodiscard]] virtual void set_cursor(cursor cursor) noexcept = 0;
+        virtual void set_cursor(cursor cursor) noexcept = 0;
+        virtual void focus_window() = 0;
         // TODO: drop
     };
 }  // namespace animgui

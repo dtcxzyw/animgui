@@ -12,6 +12,7 @@ namespace animgui {
         style.padding = { 5.0f, 5.0f };
 
         style.font_color = { 1.0f, 1.0f, 1.0f, 1.0f };
+        style.panel_background_color = { 0.6f, 0.6f, 0.6f, 1.0f };
         style.background_color = { 0.3f, 0.3f, 0.3f, 1.0f };
         style.normal_color = { 0.25f, 0.25f, 0.25f, 1.0f };
         style.highlight_color = { 0.5f, 0.5f, 0.5f, 1.0f };

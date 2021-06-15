@@ -374,6 +374,9 @@ namespace animgui {
             if(m_cursor == cursor::arrow)
                 m_cursor = cursor;
         }
+        void focus_window() override {
+            glfwFocusWindow(m_window);
+        }
     };
 
     ANIMGUI_API std::shared_ptr<input_backend> create_glfw3_backend(GLFWwindow* window, const std::function<void()>& redraw) {
