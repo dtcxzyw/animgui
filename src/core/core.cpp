@@ -340,7 +340,8 @@ namespace animgui {
                 return lut
                     .emplace(
                         glyph.idx,
-                        font.render_to_bitmap(glyph, [&](const image_desc& desc) { return m_image_compactor.compact(desc); }))
+                        font.render_to_bitmap(
+                            glyph, [&](const image_desc& desc) { return m_image_compactor.compact(desc, font.max_scale()); }))
                     .first->second;
             }
             return iter->second;
@@ -546,8 +547,8 @@ namespace animgui {
             m_command_fallback_translator.transform(optimized_commands);
             m_render_backend.update_command_list(std::move(optimized_commands));
         }
-        texture_region load_image(const image_desc& image) override {
-            return m_image_compactor.compact(image);
+        texture_region load_image(const image_desc& image, const float max_scale) override {
+            return m_image_compactor.compact(image, max_scale);
         }
         [[nodiscard]] std::shared_ptr<font> load_font(const std::pmr::string& name, const float height) const override {
             return m_font_backend.load_font(name, height);

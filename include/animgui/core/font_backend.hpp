@@ -30,6 +30,7 @@ namespace animgui {
         [[nodiscard]] virtual bounds calculate_bounds(glyph glyph) const = 0;
         virtual texture_region render_to_bitmap(glyph glyph,
                                                 const std::function<texture_region(const image_desc&)>& image_uploader) const = 0;
+        [[nodiscard]] virtual float max_scale() const noexcept = 0;
     };
 
     // TODO: SDF

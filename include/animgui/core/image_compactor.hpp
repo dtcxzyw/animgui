@@ -13,6 +13,6 @@ namespace animgui {
         image_compactor& operator=(const image_compactor& rhs) = delete;
         image_compactor& operator=(image_compactor&& rhs) = default;
         virtual void reset() = 0;
-        virtual texture_region compact(const image_desc& image) = 0;
+        virtual texture_region compact(const image_desc& image, float max_scale) = 0;
     };
 }  // namespace animgui

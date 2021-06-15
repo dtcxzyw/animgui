@@ -9,8 +9,6 @@ namespace animgui {
     static constexpr uint32_t image_pool_size = 1024;
 
     class compacted_image final {
-        static constexpr uint32_t margin = 1;
-
         std::shared_ptr<texture> m_texture;
         std::pmr::memory_resource* m_memory_resource;
 
@@ -49,7 +47,7 @@ namespace animgui {
             m_columns.push_back(column);
         }
 
-        [[nodiscard]] bounds update_texture(uvec2 offset, const image_desc& image) const {
+        [[nodiscard]] bounds update_texture(uvec2 offset, const image_desc& image, const uint32_t margin) const {
             offset.x += margin;
             offset.y += margin;
             m_texture->update_texture(offset, image);
@@ -66,9 +64,10 @@ namespace animgui {
         [[nodiscard]] std::shared_ptr<texture> texture() const {
             return m_texture;
         }
-        std::optional<bounds> allocate(const image_desc& image) {
+        std::optional<bounds> allocate(const image_desc& image, const float max_scale) {
             // Create a new node.
             tree_node new_node(m_memory_resource);
+            const auto margin = 1U << static_cast<uint32_t>(std::ceil(std::log2(std::fmax(1.0f, max_scale))));
             new_node.size.x = image.size.x + margin * 2;
             new_node.size.y = image.size.y + margin * 2;
             // The image should be smaller than the size of texture.
@@ -84,7 +83,7 @@ namespace animgui {
                             new_node.id = static_cast<int>(column.nodes.size());
                             parent.children.push_back(new_node.id);
                             column.nodes.push_back(new_node);
-                            return update_texture(new_node.pos, image);
+                            return update_texture(new_node.pos, image, margin);
                         }
                     } else {
                         if(tree_node& side = column.nodes[parent.children.back()];
@@ -96,7 +95,7 @@ namespace animgui {
                             new_node.id = static_cast<int>(column.nodes.size());
                             parent.children.push_back(new_node.id);
                             column.nodes.push_back(new_node);
-                            return update_texture(new_node.pos, image);
+                            return update_texture(new_node.pos, image, margin);
                         }
                     }
                 }
@@ -115,7 +114,7 @@ namespace animgui {
                 new_node.id = 1;
                 new_column.nodes[0].children.push_back(1);
                 new_column.nodes.push_back(new_node);
-                return update_texture(new_node.pos, image);
+                return update_texture(new_node.pos, image, margin);
             }
             // Allocation failed.
             return std::nullopt;
@@ -138,7 +137,7 @@ namespace animgui {
             for(auto&& images : m_images)
                 images.clear();
         }
-        texture_region compact(const image_desc& image) override {
+        texture_region compact(const image_desc& image, const float max_scale) override {
             if(std::max(image.size.x, image.size.y) >= image_pool_size) {
                 auto tex = m_backend.create_texture(image.size, image.channels);
                 tex->update_texture(uvec2{ 0, 0 }, image);
@@ -146,14 +145,14 @@ namespace animgui {
             }
             auto& images = m_images[static_cast<uint32_t>(image.channels)];
             for(auto&& pool : images) {
-                if(auto bounds = pool.allocate(image)) {
+                if(auto bounds = pool.allocate(image, max_scale)) {
                     return { pool.texture(), bounds.value() };
                 }
             }
             images.emplace_back(m_backend.create_texture({ image_pool_size, image_pool_size }, image.channels),
                                 m_memory_resource);
             auto&& pool = images.back();
-            return { pool.texture(), pool.allocate(image).value() };
+            return { pool.texture(), pool.allocate(image, max_scale).value() };
         }
     };
 

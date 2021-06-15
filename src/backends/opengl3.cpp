@@ -40,13 +40,9 @@ namespace animgui {
         out vec4 out_frag_color;
 
         uniform sampler2D tex;
-        uniform int alpha;
 
         void main() {
-            if(alpha==1)
-                out_frag_color = texture(tex, f_tex_coord).xxxx * f_color;
-            else
-                out_frag_color = texture(tex, f_tex_coord) * f_color;
+            out_frag_color = texture(tex, f_tex_coord) * f_color;
         }
 
         )";
@@ -57,6 +53,7 @@ namespace animgui {
         uvec2 m_size;
         bool m_own;
         GLenum m_format;
+        bool m_dirty = false;
 
         static GLenum get_format(const channel channel) noexcept {
             if(channel == channel::alpha)
@@ -79,8 +76,12 @@ namespace animgui {
             glTexImage2D(GL_TEXTURE_2D, 0, get_format(channel), size.x, size.y, 0, m_format, GL_UNSIGNED_BYTE, nullptr);
             glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
             glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
             glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+            if(channel == channel::alpha) {
+                GLint swizzle_mask[] = { GL_ONE, GL_ONE, GL_ONE, GL_RED };
+                glTexParameteriv(GL_TEXTURE_2D, GL_TEXTURE_SWIZZLE_RGBA, swizzle_mask);
+            }
         }
 
         texture_impl(const GLuint handle, const channel channel, const uvec2 size)
@@ -100,6 +101,14 @@ namespace animgui {
             glTexSubImage2D(GL_TEXTURE_2D, 0, offset.x, offset.y, image.size.x, image.size.y, m_format, GL_UNSIGNED_BYTE,
                             image.data);
             glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
+            m_dirty = true;
+        }
+
+        void generate_mipmap() override {
+            if(m_dirty) {
+                glGenerateMipmap(GL_TEXTURE_2D);
+                m_dirty = false;
+            }
         }
 
         [[nodiscard]] uvec2 texture_size() const noexcept override {
@@ -163,7 +172,7 @@ namespace animgui {
             callback(clip);
         }
 
-        void emit(const primitives& primitives, const bounds&, const vec2 size) const {
+        void emit(const primitives& primitives, const bounds&, const vec2 size) {
             auto&& [type, vertices, texture, point_line_size] = primitives;
             glEnable(GL_BLEND);
             glDisable(GL_DEPTH_TEST);
@@ -173,7 +182,6 @@ namespace animgui {
 
             glUseProgram(m_program_id);
             glUniform2f(glGetUniformLocation(m_program_id, "size"), size.x, size.y);
-            glUniform1i(glGetUniformLocation(m_program_id, "alpha"), (texture && texture->channels() == channel::alpha) ? 1 : 0);
 
             glBindBuffer(GL_ARRAY_BUFFER, m_vbo);
             glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(vertex), vertices.data(), GL_STREAM_DRAW);
@@ -181,11 +189,10 @@ namespace animgui {
                 glPointSize(point_line_size);
             glBindVertexArray(m_vao);
             glActiveTexture(GL_TEXTURE0);
-            if(!texture) {
-                glBindTexture(GL_TEXTURE_2D, static_cast<GLuint>(m_empty.native_handle()));
-            } else {
-                glBindTexture(GL_TEXTURE_2D, static_cast<GLuint>(texture->native_handle()));
-            }
+
+            auto tex = texture ? texture.get() : &m_empty;
+            tex->generate_mipmap();
+            glBindTexture(GL_TEXTURE_2D, static_cast<GLuint>(tex->native_handle()));
 
             glDrawArrays(get_mode(type), 0, static_cast<uint32_t>(vertices.size()));
         }

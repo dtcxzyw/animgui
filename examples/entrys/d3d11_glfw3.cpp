@@ -88,7 +88,7 @@ int main() {
         std::function<void()> draw;
         const auto glfw3_backend = animgui::create_glfw3_backend(window, draw);
         const auto d3d11_backend = animgui::create_d3d11_backend(device, device_context, check_d3d11_error);
-        const auto stb_font_backend = animgui::create_stb_font_backend();
+        const auto stb_font_backend = animgui::create_stb_font_backend(8.0f);
         const auto animator = animgui::create_dummy_animator();
         const auto emitter = animgui::create_builtin_emitter(memory_resource);
         const auto command_optimizer = animgui::create_builtin_command_optimizer();

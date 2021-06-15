@@ -128,13 +128,12 @@ namespace animgui {
                !clip_bounds(rect, offset, clip_rect))
                 return;
             const auto unused = vec2{ 0.0f, 0.0f };
-            commands.push_back(
-                { clip_rect,
-                  primitives{ primitive_type::points,
-                              { { { { item.pos.x + clip_rect.left, item.pos.y + clip_rect.top }, unused, item.color } },
-                                commands.get_allocator().resource() },
-                              nullptr,
-                              item.size } });
+            commands.push_back({ clip_rect,
+                                 primitives{ primitive_type::points,
+                                             { { { { item.pos.x + offset.x, item.pos.y + offset.y }, unused, item.color } },
+                                               commands.get_allocator().resource() },
+                                             nullptr,
+                                             item.size } });
         }
         static vec2 calc_bounds(const canvas_image& item, const style&) {
             return { item.bounds.right - item.bounds.left, item.bounds.bottom - item.bounds.top };
@@ -173,7 +172,7 @@ namespace animgui {
             return { width, item.font->height() };
         }
         static void emit(const canvas_text& item, const bounds& clip_rect, vec2 offset, std::pmr::vector<command>& commands,
-                         const style&, const std::function<texture_region(font&, glyph)>& font_callback) {
+                         const style& style, const std::function<texture_region(font&, glyph)>& font_callback) {
             auto beg = item.str.begin();
             const auto end = item.str.end();
             glyph prev{ 0 };

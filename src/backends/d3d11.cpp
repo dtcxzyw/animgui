@@ -22,14 +22,29 @@ namespace animgui {
     class texture_impl final : public texture {
         ID3D11Texture2D* m_texture;
         ID3D11DeviceContext* m_device_context;
+        ID3D11ShaderResourceView* m_texture_srv;
         channel m_channel;
         uvec2 m_size;
         bool m_own;
+        bool m_dirty;
         const std::function<void(long)>& m_error_checker;
 
         void check_d3d_error(const HRESULT res) const {
             if(res != S_OK)
                 m_error_checker(res);
+        }
+
+        [[nodiscard]] uint32_t calc_mip_levels() const {
+            return static_cast<uint32_t>(std::floor(std::log2(std::min(m_size.x, m_size.y))));
+        }
+
+        void create_texture_srv(ID3D11Device* device) {
+            D3D11_SHADER_RESOURCE_VIEW_DESC desc;
+            desc.Format = get_format(m_channel);
+            desc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
+            desc.Texture2D.MipLevels = calc_mip_levels();
+            desc.Texture2D.MostDetailedMip = 0;
+            check_d3d_error(device->CreateShaderResourceView(m_texture, &desc, &m_texture_srv));
         }
 
     public:
@@ -40,43 +55,56 @@ namespace animgui {
 
         texture_impl(ID3D11Device* device, ID3D11DeviceContext* device_context, const channel channel, const uvec2 size,
                      const std::function<void(long)>& error_checker)
-            : m_texture{ nullptr }, m_device_context{ device_context }, m_channel{ channel }, m_size{ size }, m_own{ true },
-              m_error_checker{ error_checker } {
+            : m_texture{ nullptr }, m_device_context{ device_context }, m_texture_srv{ nullptr }, m_channel{ channel },
+              m_size{ size }, m_own{ true }, m_dirty{ false }, m_error_checker{ error_checker } {
             D3D11_TEXTURE2D_DESC desc{ size.x,
                                        size.y,
-                                       1,
+                                       calc_mip_levels(),
                                        1,
                                        get_format(channel),
                                        DXGI_SAMPLE_DESC{ 1, 0 },
                                        D3D11_USAGE_DEFAULT,
-                                       D3D11_BIND_SHADER_RESOURCE,
+                                       D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_RENDER_TARGET,
                                        0,
-                                       0 };
+                                       D3D11_RESOURCE_MISC_GENERATE_MIPS };
             check_d3d_error(device->CreateTexture2D(&desc, nullptr, &m_texture));
+            create_texture_srv(device);
         }
 
-        texture_impl(ID3D11Texture2D* handle, ID3D11DeviceContext* device_context, const channel channel, const uvec2 size,
-                     const std::function<void(long)>& error_checker)
-            : m_texture{ handle }, m_device_context{ device_context }, m_channel{ channel }, m_size{ size },
-              m_own(false), m_error_checker{ error_checker } {}
+        texture_impl(ID3D11Texture2D* handle, ID3D11Device* device, ID3D11DeviceContext* device_context, const channel channel,
+                     const uvec2 size, const std::function<void(long)>& error_checker)
+            : m_texture{ handle }, m_device_context{ device_context },
+              m_texture_srv{ nullptr }, m_channel{ channel }, m_size{ size },
+              m_own(false), m_dirty{ false }, m_error_checker{ error_checker } {
+            create_texture_srv(device);
+        }
 
         ~texture_impl() override {
+            m_texture_srv->Release();
             if(m_own) {
                 m_texture->Release();
+            }
+        }
+        void generate_mipmap() override {
+            if(m_dirty) {
+                m_device_context->GenerateMips(m_texture_srv);
+                m_dirty = false;
             }
         }
 
         void update_texture(const uvec2 offset, const image_desc& image) override {
             if(image.channels != m_channel)
                 throw std::runtime_error{ "mismatched channel" };
+            if(image.size.x == 0 || image.size.y == 0)
+                return;
 
-            image_desc src = image;
+            auto [size, channels, data] = image;
             std::pmr::vector<uint8_t> rgba;
             if(image.channels == channel::rgb) {
-                rgba.resize(image.size.x * image.size.y * 4);
+                rgba.resize(static_cast<size_t>(size.x) * size.y * 4);
                 auto read_ptr = static_cast<const uint8_t*>(image.data);
                 auto write_ptr = rgba.data();
-                const auto end = read_ptr + image.size.x * image.size.y * 3;
+                const auto end = read_ptr + static_cast<size_t>(size.x) * size.y * 3;
                 while(read_ptr != end) {
                     *(write_ptr++) = *(read_ptr++);
                     *(write_ptr++) = *(read_ptr++);
@@ -84,11 +112,12 @@ namespace animgui {
                     *(write_ptr++) = 255;
                 }
 
-                src.data = rgba.data();
+                data = rgba.data();
             }
             const auto size_dst = m_channel == channel::alpha ? 1 : 4;
-            D3D11_BOX box{ offset.x, offset.y, 0, offset.x + src.size.x, offset.y + src.size.y, 1 };
-            m_device_context->UpdateSubresource(m_texture, 0, &box, src.data, src.size.x * size_dst, 0);
+            D3D11_BOX box{ offset.x, offset.y, 0, offset.x + size.x, offset.y + size.y, 1 };
+            m_device_context->UpdateSubresource(m_texture, 0, &box, data, size.x * size_dst, 0);
+            m_dirty = true;
         }
 
         [[nodiscard]] uvec2 texture_size() const noexcept override {
@@ -100,7 +129,7 @@ namespace animgui {
         }
 
         [[nodiscard]] uint64_t native_handle() const noexcept override {
-            return reinterpret_cast<uint64_t>(m_texture);
+            return reinterpret_cast<uint64_t>(m_texture_srv);
         }
     };
 
@@ -179,8 +208,6 @@ namespace animgui {
         ID3D11BlendState* m_blend_state = nullptr;
         ID3D11DepthStencilState* m_depth_stencil_state = nullptr;
 
-        std::pmr::unordered_map<uint64_t, ID3D11ShaderResourceView*> m_texture_shader_resource_view;
-
         void check_d3d_error(const HRESULT res) const {
             if(res != S_OK)
                 m_error_checker(res);
@@ -219,19 +246,6 @@ namespace animgui {
                     return D3D11_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP;
             }
             return static_cast<D3D11_PRIMITIVE_TOPOLOGY>(0);
-        }
-
-        ID3D11ShaderResourceView* get_texture_view(const uint64_t texture, const channel channels) {
-            auto&& view = m_texture_shader_resource_view[texture];
-            if(!view) {
-                D3D11_SHADER_RESOURCE_VIEW_DESC desc{};
-                desc.Format = get_format(channels);
-                desc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
-                desc.Texture2D.MipLevels = 1;
-                desc.Texture2D.MostDetailedMip = 0;
-                check_d3d_error(m_device->CreateShaderResourceView(reinterpret_cast<ID3D11Resource*>(texture), &desc, &view));
-            }
-            return view;
         }
 
         void emit(const primitives& primitives, const bounds& clip, const uvec2 screen_size) {
@@ -274,7 +288,8 @@ namespace animgui {
             m_device_context->IASetPrimitiveTopology(get_primitive_type(type));
             if(texture) {
                 m_device_context->PSSetSamplers(0, 1, &m_sampler_state);
-                const auto texture_srv = get_texture_view(texture->native_handle(), texture->channels());
+                texture->generate_mipmap();
+                const auto texture_srv = reinterpret_cast<ID3D11ShaderResourceView*>(texture->native_handle());
                 m_device_context->PSSetShaderResources(0, 1, &texture_srv);
             }
 
@@ -360,10 +375,11 @@ namespace animgui {
                 desc.AddressU = D3D11_TEXTURE_ADDRESS_CLAMP;
                 desc.AddressV = D3D11_TEXTURE_ADDRESS_CLAMP;
                 desc.AddressW = D3D11_TEXTURE_ADDRESS_CLAMP;
-                desc.Filter = D3D11_FILTER_MIN_LINEAR_MAG_MIP_POINT;
+                desc.Filter = D3D11_FILTER_MIN_MAG_MIP_LINEAR;
                 desc.ComparisonFunc = D3D11_COMPARISON_ALWAYS;
-                desc.MaxAnisotropy = 0;
-                desc.MinLOD = desc.MaxLOD = 0.0f;
+                desc.MaxAnisotropy = 1;
+                desc.MinLOD = 0.0f;
+                desc.MaxLOD = std::numeric_limits<float>::max();
                 desc.MipLODBias = 0.0f;
                 check_d3d_error(m_device->CreateSamplerState(&desc, &m_sampler_state));
             }
@@ -383,8 +399,6 @@ namespace animgui {
             m_rasterizer_state->Release();
             m_blend_state->Release();
             m_depth_stencil_state->Release();
-            for(auto&& [key, view] : m_texture_shader_resource_view)
-                view->Release();
         }
         void update_command_list(std::pmr::vector<command> command_list) override {
             m_command_list = std::move(command_list);
@@ -400,8 +414,8 @@ namespace animgui {
             return std::make_shared<texture_impl>(m_device, m_device_context, channels, size, m_error_checker);
         }
         std::shared_ptr<texture> create_texture_from_native_handle(const uint64_t handle, uvec2 size, channel channels) override {
-            return std::make_shared<texture_impl>(reinterpret_cast<ID3D11Texture2D*>(handle), m_device_context, channels, size,
-                                                  m_error_checker);
+            return std::make_shared<texture_impl>(reinterpret_cast<ID3D11Texture2D*>(handle), m_device, m_device_context,
+                                                  channels, size, m_error_checker);
         }
         [[nodiscard]] primitive_type supported_primitives() const noexcept override {
             return primitive_type::triangle_strip | primitive_type::triangles;

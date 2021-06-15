@@ -31,7 +31,7 @@ namespace animgui {
         virtual void new_frame(uint32_t width, uint32_t height, float delta_t,
                                const std::function<void(canvas& canvas)>& render_function) = 0;
         virtual void reset_cache() = 0;
-        virtual texture_region load_image(const image_desc& image) = 0;
+        virtual texture_region load_image(const image_desc& image, float max_scale) = 0;
         [[nodiscard]] virtual std::shared_ptr<font> load_font(const std::pmr::string& name, float height) const = 0;
         virtual style& style() noexcept = 0;
     };

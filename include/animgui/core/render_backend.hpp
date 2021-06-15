@@ -27,6 +27,7 @@ namespace animgui {
         virtual ~texture() = default;
 
         virtual void update_texture(uvec2 offset, const image_desc& image) = 0;
+        virtual void generate_mipmap() = 0;
         [[nodiscard]] virtual uvec2 texture_size() const noexcept = 0;
         [[nodiscard]] virtual channel channels() const noexcept = 0;
         [[nodiscard]] virtual uint64_t native_handle() const noexcept = 0;

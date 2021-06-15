@@ -87,29 +87,26 @@ namespace animgui {
             }
             const auto width = reserved_size().x;
             if(!m_current_line.empty()) {
-                const auto total_width = width_sum + static_cast<float>(m_current_line.size()) * style().spacing.x;
+                const auto total_width =
+                    width_sum + std::fmax(0.0f, static_cast<float>(m_current_line.size()) - 1.0f) * style().spacing.x;
                 m_max_total_width = std::fmaxf(m_max_total_width, total_width);
                 auto alignment = m_alignment;
-                if(alignment == row_alignment::justify &&
-                   (m_current_line.size() == 1 || width < width_sum + 2.0f * style().spacing.x))
+                if(alignment == row_alignment::justify && (m_current_line.size() == 1 || width < width_sum))
                     alignment = row_alignment::middle;
                 auto offset = 0.0f;
                 auto spacing = style().spacing.x;
 
                 switch(alignment) {
                     case row_alignment::left:
-                        offset = spacing;
                         break;
                     case row_alignment::right: {
-                        offset = width - total_width - spacing;
+                        offset = width - total_width;
                     } break;
                     case row_alignment::middle: {
                         offset = (width - total_width) / 2.0f;
                     } break;
                     case row_alignment::justify: {
-                        spacing =
-                            (width - width_sum - 2.0f * style().spacing.x) / (static_cast<float>(m_current_line.size()) - 1);
-                        offset = style().spacing.x;
+                        spacing = (width - width_sum) / (static_cast<float>(m_current_line.size()) - 1);
                         m_max_total_width = std::fmaxf(m_max_total_width, width);
                     } break;
                 }
