@@ -171,7 +171,9 @@ namespace animgui {
     ANIMGUI_API void panel(canvas& parent, const vec2 size, const std::function<void(canvas&)>& render_function) {
         const bounds bounds{ 0.0f, size.x, 0.0f, size.y };
         parent.push_region(parent.region_sub_uid(), bounds);
-        parent.add_primitive(parent.region_sub_uid(), canvas_stroke_rect{ bounds, parent.style().highlight_color, 5.0f });
+        parent.add_primitive(
+            parent.region_sub_uid(),
+            canvas_stroke_rect{ bounds, parent.style().highlight_color, parent.style().panel_bounds_edge_width });
         render_function(parent);
         parent.pop_region();
     }
@@ -211,11 +213,14 @@ namespace animgui {
             layout_proxy::add_primitive("window_background"_id,
                                         canvas_fill_rect{ { 0.0f, m_size.x, 0.0f, m_size.y }, style().panel_background_color });
             layout_proxy::add_primitive("window_bounds"_id,
-                                        canvas_stroke_rect{ { 0.0f, m_size.x, 0.0f, m_size.y }, style().highlight_color, 5.0f });
+                                        canvas_stroke_rect{ { 0.0f, m_size.x, 0.0f, m_size.y },
+                                                            style().highlight_color,
+                                                            layout_proxy::style().panel_bounds_edge_width });
             const auto height = style().font->height() * 1.1f;
 
             if(!has_attribute(m_attributes, window_attributes::no_title_bar)) {
                 const animgui::bounds bar{ 0.0f, m_size.x, 0.0f, height };
+                // ReSharper disable once CppTooWideScope
                 const auto bar_uid = layout_proxy::push_region("title_bar"_id, bar).second;
 
                 if(has_attribute(m_attributes, window_attributes::movable) && selected(*this, bar_uid)) {
@@ -349,6 +354,27 @@ namespace animgui {
             return m_info.front();
         }
 
+        static void clamp_bounds(bounds& bounds, const vec2 size) {
+            if(bounds.right - bounds.left < size.x) {
+                if(bounds.left < 0.0f) {
+                    bounds.right -= bounds.left;
+                    bounds.left = 0.0f;
+                } else if(bounds.right > size.x) {
+                    bounds.left -= bounds.right - size.x;
+                    bounds.right = size.x;
+                }
+            }
+            if(bounds.bottom - bounds.top < size.y) {
+                if(bounds.top < 0.0f) {
+                    bounds.bottom -= bounds.top;
+                    bounds.top = 0.0f;
+                } else if(bounds.bottom > size.y) {
+                    bounds.top -= bounds.bottom - size.y;
+                    bounds.bottom = size.y;
+                }
+            }
+        }
+
     public:
         explicit multiple_window_canvas_impl(canvas& parent)
             : multiple_window_canvas{ parent }, m_ranges{ parent.memory_resource() },
@@ -364,7 +390,7 @@ namespace animgui {
                 const auto size = reserved_size();
                 m_current = id;
                 push_region(id, animgui::bounds{ 0.0f, size.x, 0.0f, size.y });
-
+                clamp_bounds(bounds, size);
                 window_canvas_impl canvas{ *this, bounds, std::move(title), attributes, operator_, &absolute_bounds };
                 render_function(canvas);
                 canvas.finish();
@@ -372,23 +398,30 @@ namespace animgui {
 
                 const auto end = commands().size();
                 m_ranges[id] = { beg, end };
+                // TODO: formalize interface
                 if(auto_adjust) {
                     std::pmr::vector<vec2> offset{ { { 0.0f, 0.0f } }, memory_resource() };
-                    animgui::bounds content_bounds{ 0.0f, 0.0f, 0.0f, 0.0f };
+                    animgui::bounds content_bounds{ 0.0f, 0.0f, 0.0f, 0.0f }, sub_bounds{ 0.0f, 0.0f, 0.0f, 0.0f };
+                    bool valid = false;
                     for(size_t idx = beg; idx < end; ++idx) {
                         // ReSharper disable once CppDefaultCaseNotHandledInSwitchStatement
                         switch(const auto& cmd = commands()[idx]; cmd.index()) {
                             case 0: {
-                                const auto& sub_bounds = std::get<animgui::push_region>(cmd).bounds;
+                                sub_bounds = std::get<animgui::push_region>(cmd).bounds;
                                 const auto current = offset.back();
-                                content_bounds.left = std::fmin(content_bounds.left, sub_bounds.left + current.x);
-                                content_bounds.right = std::fmax(content_bounds.right, sub_bounds.right + current.x);
-                                content_bounds.top = std::fmin(content_bounds.top, sub_bounds.top + current.y);
-                                content_bounds.bottom = std::fmax(content_bounds.bottom, sub_bounds.bottom + current.y);
                                 offset.push_back({ current.x + sub_bounds.left, current.y + sub_bounds.top });
+                                valid = true;
                             } break;
                             case 1: {
                                 offset.pop_back();
+                                if(valid) {
+                                    const auto current = offset.back();
+                                    content_bounds.left = std::fmin(content_bounds.left, sub_bounds.left + current.x);
+                                    content_bounds.right = std::fmax(content_bounds.right, sub_bounds.right + current.x);
+                                    content_bounds.top = std::fmin(content_bounds.top, sub_bounds.top + current.y);
+                                    content_bounds.bottom = std::fmax(content_bounds.bottom, sub_bounds.bottom + current.y);
+                                    valid = false;
+                                }
                             } break;
                         }
                     }
@@ -405,7 +438,7 @@ namespace animgui {
                 if(iter->id == m_current) {
                     break;
                 }
-                if(hovered(iter->absolute_bounds))
+                if(iter->is_open && hovered(iter->absolute_bounds))
                     return false;
             }
             return true;
@@ -417,7 +450,7 @@ namespace animgui {
                 if(iter->id == m_current) {
                     break;
                 }
-                if(pressed(key, iter->absolute_bounds))
+                if(iter->is_open && pressed(key, iter->absolute_bounds))
                     return false;
             }
             return true;
@@ -465,8 +498,6 @@ namespace animgui {
                     }
             }
 
-            const auto size = reserved_size();
-
             for(auto&& [id, delta] : m_move_requests) {
                 for(auto& win : m_info)
                     if(id == win.id) {
@@ -474,24 +505,6 @@ namespace animgui {
                         win.bounds.right += delta.x;
                         win.bounds.top += delta.y;
                         win.bounds.bottom += delta.y;
-                        if(win.bounds.right - win.bounds.left < size.x) {
-                            if(win.bounds.left < 0.0f) {
-                                win.bounds.right -= win.bounds.left;
-                                win.bounds.left = 0.0f;
-                            } else if(win.bounds.right > size.x) {
-                                win.bounds.left -= win.bounds.right - size.x;
-                                win.bounds.right = size.x;
-                            }
-                        }
-                        if(win.bounds.bottom - win.bounds.top < size.y) {
-                            if(win.bounds.top < 0.0f) {
-                                win.bounds.bottom -= win.bounds.top;
-                                win.bounds.top = 0.0f;
-                            } else if(win.bounds.bottom > size.y) {
-                                win.bounds.top -= win.bounds.bottom - size.y;
-                                win.bounds.bottom = size.y;
-                            }
-                        }
                         break;
                     }
             }
@@ -499,7 +512,7 @@ namespace animgui {
             const auto commands_range = commands();
             std::pmr::vector<operation> new_commands;
             new_commands.reserve(commands_range.size());
-            for(auto [id, bounds, _, is_open, __] : m_info) {
+            for(auto [id, bounds, absolute_bounds, is_open, auto_adjust] : m_info) {
                 if(const auto iter = m_ranges.find(id); iter != m_ranges.cend()) {
                     const auto [beg, end] = iter->second;
                     new_commands.insert(new_commands.cend(), commands_range.begin() + beg, commands_range.begin() + end);

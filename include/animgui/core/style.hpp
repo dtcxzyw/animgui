@@ -16,9 +16,12 @@ namespace animgui {
         color highlight_color;
         color disabled_color;
         color font_color;
+        color selected_color;
 
         vec2 padding;
         vec2 spacing;
         float rounding;
+        float bounds_edge_width;
+        float panel_bounds_edge_width;
     };
 }  // namespace animgui

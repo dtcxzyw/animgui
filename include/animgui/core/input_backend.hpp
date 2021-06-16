@@ -13,9 +13,9 @@ namespace animgui {
         back = 0x08,
         tab = 0x09,
         enter = 0x0D,
-        shift = 0x10,
-        control = 0x11,
-        menu = 0x12,
+        // shift = 0x10,
+        // control = 0x11,
+        // menu = 0x12,
         pause = 0x13,
         capital = 0x14,
         escape = 0x1B,
@@ -100,6 +100,8 @@ namespace animgui {
         max = 0xFF,
     };
 
+    enum class modifier_key : uint32_t { shift, control, alt };
+
     struct game_pad_state final {
         bool a, b, x, y, left_bumper, right_bumper, back, start, guide, left_thumb, right_thumb, d_pad_up, d_pad_right,
             d_pad_down, d_pad_left;
@@ -123,8 +125,11 @@ namespace animgui {
         virtual void set_clipboard_text(const std::pmr::string& str) = 0;
         virtual std::pmr::string get_clipboard_text() = 0;
 
-        virtual vec2 get_cursor_pos() = 0;
-        virtual bool get_key(key_code code) = 0;
+        [[nodiscard]] virtual span<const uint32_t> get_input_characters() const noexcept = 0;
+        [[nodiscard]] virtual vec2 get_cursor_pos() const = 0;
+        [[nodiscard]] virtual bool get_key(key_code code) const = 0;
+        [[nodiscard]] virtual bool get_key_pulse(key_code code, bool allow_repeated) const = 0;
+        [[nodiscard]] virtual bool get_modifier_key(modifier_key code) const = 0;
         virtual void close_window() = 0;
         virtual void minimize_window() = 0;
         virtual void maximize_window() = 0;

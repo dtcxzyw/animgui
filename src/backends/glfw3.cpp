@@ -200,8 +200,8 @@ namespace animgui {
                 return key_code ::right_control;
             case GLFW_KEY_RIGHT_ALT:
                 return key_code::right_alt;
-            case GLFW_KEY_MENU:
-                return key_code ::menu;
+            // case GLFW_KEY_MENU:
+            //    return key_code ::menu;
             default:
                 return key_code::max;
         }
@@ -213,19 +213,25 @@ namespace animgui {
         vec2 m_cursor_pos;
         vec2 m_mouse_move;
         vec2 m_scroll;
-        bool m_key_state[256];
+        bool m_key_state[256], m_key_state_pulse[256], m_key_state_pulse_repeated[256];
         input_mode m_input_mode;
         cursor m_cursor;
-        std::unordered_map<cursor, GLFWcursor*> m_cursors;
+        std::pmr::unordered_map<cursor, GLFWcursor*> m_cursors;
+        std::pmr::vector<uint32_t> m_input_characters;
 
         game_pad_state m_game_pad_state[GLFW_JOYSTICK_LAST + 1];
-        std::vector<size_t> m_available_game_pad;
+        std::pmr::vector<size_t> m_available_game_pad;
 
         const std::function<void()>& m_redraw;
 
-        void add_char(const uint32_t codepoint) {}
-        void key_event(const int key, const bool state) {
-            m_key_state[static_cast<uint32_t>(cast_key_code(key))] = state;
+        void add_char(const uint32_t codepoint) {
+            m_input_characters.push_back(codepoint);
+        }
+        void key_event(const int key, const int state) {
+            const auto idx = static_cast<uint32_t>(cast_key_code(key));
+            m_key_state[idx] = state != GLFW_RELEASE;
+            m_key_state_pulse[idx] = state == GLFW_PRESS;
+            m_key_state_pulse_repeated[idx] = state != GLFW_RELEASE;
         }
         void cursor_event(const vec2 pos) {
             m_input_mode = input_mode::mouse;
@@ -253,10 +259,10 @@ namespace animgui {
             });
             // TODO: modifier keys?
             glfwSetKeyCallback(m_window, [](GLFWwindow* const win, const int key, int, const int action, int) {
-                static_cast<glfw3_backend*>(glfwGetWindowUserPointer(win))->key_event(key, action != GLFW_RELEASE);
+                static_cast<glfw3_backend*>(glfwGetWindowUserPointer(win))->key_event(key, action);
             });
             glfwSetMouseButtonCallback(m_window, [](GLFWwindow* const win, const int key, const int action, int) {
-                static_cast<glfw3_backend*>(glfwGetWindowUserPointer(win))->key_event(key, action != GLFW_RELEASE);
+                static_cast<glfw3_backend*>(glfwGetWindowUserPointer(win))->key_event(key, action);
             });
             glfwSetScrollCallback(m_window, [](GLFWwindow* const win, const double x, const double y) {
                 static_cast<glfw3_backend*>(glfwGetWindowUserPointer(win))
@@ -289,10 +295,10 @@ namespace animgui {
         std::pmr::string get_clipboard_text() override {
             return glfwGetClipboardString(nullptr);
         }
-        vec2 get_cursor_pos() override {
+        [[nodiscard]] vec2 get_cursor_pos() const override {
             return m_cursor_pos;
         }
-        bool get_key(key_code code) override {
+        [[nodiscard]] bool get_key(key_code code) const override {
             return m_key_state[static_cast<uint32_t>(code)];
         }
         void set_clipboard_text(const std::pmr::string& str) override {
@@ -332,7 +338,7 @@ namespace animgui {
             m_cursor = cursor::arrow;
             m_mouse_move = m_scroll = { 0.0f, 0.0f };
             m_available_game_pad.clear();
-            const auto flush = [](float& x) { x = std::fabs(x) < game_pad_axis_eps ? 0.0f : x; };
+            const auto flush_to_zero = [](float& x) { x = std::fabs(x) < game_pad_axis_eps ? 0.0f : x; };
             for(int i = 0; i <= GLFW_JOYSTICK_LAST; ++i) {
                 if(!glfwJoystickPresent(i) || !glfwJoystickIsGamepad(i))
                     continue;
@@ -340,7 +346,7 @@ namespace animgui {
                 static_assert(sizeof(game_pad_state) == sizeof(GLFWgamepadstate));
                 if(auto state = reinterpret_cast<GLFWgamepadstate*>(&m_game_pad_state[i]); glfwGetGamepadState(i, state)) {
                     for(int j = 0; j < 4; ++j)
-                        flush(state->axes[j]);
+                        flush_to_zero(state->axes[j]);
                     m_available_game_pad.push_back(i);
                     if(m_input_mode != input_mode::game_pad) {
                         for(auto&& button : state->buttons)
@@ -357,6 +363,10 @@ namespace animgui {
                     }
                 }
             }
+
+            m_input_characters.clear();
+            memset(m_key_state_pulse, 0, sizeof(m_key_state_pulse));
+            memset(m_key_state_pulse_repeated, 0, sizeof(m_key_state_pulse_repeated));
         }
         [[nodiscard]] std::pmr::string get_game_pad_name(const size_t idx) const override {
             return glfwGetGamepadName(static_cast<int>(idx));
@@ -376,6 +386,23 @@ namespace animgui {
         }
         void focus_window() override {
             glfwFocusWindow(m_window);
+        }
+        [[nodiscard]] bool get_modifier_key(const modifier_key code) const override {
+            switch(code) {
+                case modifier_key::shift:
+                    return get_key(key_code::left_shift) || get_key(key_code::right_shift);
+                case modifier_key::control:
+                    return get_key(key_code::left_control) || get_key(key_code::right_control);
+                case modifier_key::alt:
+                    return get_key(key_code::left_alt) || get_key(key_code::right_alt);
+            }
+            return false;
+        }
+        [[nodiscard]] span<const uint32_t> get_input_characters() const noexcept override {
+            return { m_input_characters.data(), m_input_characters.data() + m_input_characters.size() };
+        }
+        [[nodiscard]] bool get_key_pulse(key_code code, const bool allow_repeated) const override {
+            return (allow_repeated ? m_key_state_pulse_repeated : m_key_state_pulse)[static_cast<uint32_t>(code)];
         }
     };
 

@@ -16,12 +16,13 @@ namespace animgui {
     class font_impl final : public font {
         std::pmr::vector<uint8_t> m_font_data;
         stbtt_fontinfo m_font_info;
-        float m_height, m_super_sample, m_render_scale, m_bake_scale, m_line_spacing, m_baseline;
+        float m_height, m_super_sample, m_render_scale, m_bake_scale, m_line_spacing, m_baseline, m_standard_width;
 
     public:
         font_impl(const fs::path& path, const float height, const float super_sample, std::pmr::memory_resource* memory_resource)
             : m_font_data{ fs::file_size(path), memory_resource }, m_font_info{}, m_height{ height },
-              m_super_sample{ super_sample }, m_render_scale{ 0.0f }, m_bake_scale{ 0.0f }, m_line_spacing{ 0.0f } {
+              m_super_sample{ super_sample }, m_render_scale{ 0.0f }, m_bake_scale{ 0.0f }, m_line_spacing{ 0.0f },
+              m_baseline{ 0.0f }, m_standard_width{ 0.0f } {
             {
                 std::ifstream in{ path, std::ios::in | std::ios::binary };
                 in.read(reinterpret_cast<char*>(m_font_data.data()), m_font_data.size());
@@ -34,6 +35,10 @@ namespace animgui {
             stbtt_GetFontVMetrics(&m_font_info, &ascent, &descent, &line_gap_val);
             m_line_spacing = static_cast<float>(ascent - descent + line_gap_val) * m_render_scale;
             m_baseline = static_cast<float>(ascent) * m_render_scale;
+
+            int x0, y0, x1, y1;
+            stbtt_GetCodepointBox(&m_font_info, 'W', &x0, &y0, &x1, &y1);
+            m_standard_width = static_cast<float>(x1 - x0) * m_render_scale / 1.5f;
         }
         [[nodiscard]] float height() const noexcept override {
             return m_height;
@@ -44,7 +49,7 @@ namespace animgui {
             stbtt_GetGlyphBitmapBox(&m_font_info, glyph.idx, m_bake_scale, m_bake_scale, &x0, &y0, &x1, &y1);
             const uint32_t w = x1 - x0;
             const uint32_t h = y1 - y0;
-            std::pmr::vector<uint8_t> buffer{ w * h, m_font_data.get_allocator().resource() };
+            std::pmr::vector<uint8_t> buffer{ static_cast<size_t>(w) * h, m_font_data.get_allocator().resource() };
             const image_desc image{ { w, h }, channel::alpha, buffer.data() };
             stbtt_MakeGlyphBitmap(&m_font_info, const_cast<uint8_t*>(static_cast<const uint8_t*>(buffer.data())), w, h, w,
                                   m_bake_scale, m_bake_scale, glyph.idx);
@@ -71,7 +76,10 @@ namespace animgui {
                            static_cast<float>(-y1) * m_render_scale + m_baseline,
                            static_cast<float>(-y0) * m_render_scale + m_baseline };
         }
-        float max_scale() const noexcept override {
+        [[nodiscard]] float standard_width() const noexcept override {
+            return m_standard_width;
+        }
+        [[nodiscard]] float max_scale() const noexcept override {
             return m_super_sample;
         }
     };

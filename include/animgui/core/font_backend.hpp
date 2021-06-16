@@ -24,6 +24,7 @@ namespace animgui {
         virtual ~font() = default;
 
         [[nodiscard]] virtual float height() const noexcept = 0;
+        [[nodiscard]] virtual float standard_width() const noexcept = 0;
         [[nodiscard]] virtual float line_spacing() const noexcept = 0;
         [[nodiscard]] virtual glyph to_glyph(uint32_t codepoint) const = 0;
         [[nodiscard]] virtual float calculate_advance(glyph glyph, animgui::glyph prev) const = 0;

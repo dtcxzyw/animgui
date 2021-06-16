@@ -50,7 +50,7 @@ namespace animgui {
                               { { { p0, unused, front }, { p1, unused, front }, { p2, unused, front }, { p3, unused, front } },
                                 commands.get_allocator().resource() },
                               nullptr,
-                              3.0f } });
+                              style.bounds_edge_width } });
         }
         static vec2 calc_bounds(const canvas_stroke_rect& item, const style&) {
             return { item.bounds.right - item.bounds.left + item.size, item.bounds.bottom - item.bounds.top + item.size };
@@ -172,7 +172,8 @@ namespace animgui {
             return { width, item.font->height() };
         }
         static void emit(const canvas_text& item, const bounds& clip_rect, vec2 offset, std::pmr::vector<command>& commands,
-                         const style& style, const std::function<texture_region(font&, glyph)>& font_callback) {
+                         const style&, const std::function<texture_region(font&, glyph)>& font_callback) {
+            offset = offset + item.pos;
             auto beg = item.str.begin();
             const auto end = item.str.end();
             glyph prev{ 0 };

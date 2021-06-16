@@ -13,6 +13,7 @@
 namespace animgui {
     class demo final : public application {
         uint32_t m_count;
+        std::pmr::string m_text;
 
     public:
         explicit demo(context& context) : m_count{ 0 } {
@@ -81,6 +82,8 @@ namespace animgui {
                                 if(button_label(layout, "Add")) {
                                     ++m_count;
                                 }
+                                layout.newline();
+                                text_edit(layout, 20.0f, m_text, "input");
                                 layout.newline();
                                 if(button_label(layout, "game pad")) {
                                     manager.open_window("game_pad"_id);
