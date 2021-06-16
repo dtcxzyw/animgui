@@ -52,4 +52,13 @@ namespace animgui {
         return button_with_content(
             canvas, [&](animgui::canvas& sub_canvas) { animgui::image(sub_canvas, std::move(image), size, factor); });
     }
+    ANIMGUI_API bool selected(canvas& canvas, const uid id) {
+        auto& [state, pressed] = canvas.storage<std::pair<bool, bool>>(id);
+        if(canvas.region_hovered() && !pressed && canvas.region_pressed(key_code::left_button)) {
+            state = true;
+        } else if(!canvas.input_backend().get_key(key_code::left_button))
+            state = false;
+        pressed = canvas.input_backend().get_key(key_code::left_button);
+        return state;
+    }
 }  // namespace animgui

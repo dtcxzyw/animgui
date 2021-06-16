@@ -6,6 +6,8 @@
 namespace animgui {
     struct texture_region;
     class canvas;
+    ANIMGUI_API bool selected(canvas& canvas, uid id);
+
     ANIMGUI_API void text(canvas& canvas, std::pmr::string str);
     ANIMGUI_API void image(canvas& canvas, texture_region image, vec2 size, const color& factor);
     ANIMGUI_API bool button_label(canvas& canvas, std::pmr::string label);

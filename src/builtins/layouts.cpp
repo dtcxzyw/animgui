@@ -4,6 +4,7 @@
 #include <animgui/builtins/widgets.hpp>
 #include <animgui/core/input_backend.hpp>
 #include <animgui/core/style.hpp>
+#include <string>
 
 namespace animgui {
     std::pmr::memory_resource* layout_proxy::memory_resource() const noexcept {
@@ -198,28 +199,28 @@ namespace animgui {
 
     public:
         window_canvas_impl(canvas& parent, const bounds& bounds, std::optional<std::pmr::string> title,
-                           const window_attributes attributes, window_operator& operator_)
+                           const window_attributes attributes, window_operator& operator_,
+                           animgui::bounds* absolute_bounds = nullptr)
             : window_canvas{ parent }, m_attributes{ attributes }, m_operator{ operator_ }, m_size{ bounds.size() } {
-            layout_proxy::push_region("window"_id, bounds);
+            const auto full_id = layout_proxy::push_region("window"_id, bounds).second;
+            if(absolute_bounds)
+                *absolute_bounds = layout_proxy::region_bounds();
+            if(selected(*this, full_id))
+                m_operator.focus();
 
             layout_proxy::add_primitive("window_background"_id,
                                         canvas_fill_rect{ { 0.0f, m_size.x, 0.0f, m_size.y }, style().panel_background_color });
             layout_proxy::add_primitive("window_bounds"_id,
                                         canvas_stroke_rect{ { 0.0f, m_size.x, 0.0f, m_size.y }, style().highlight_color, 5.0f });
             const auto height = style().font->height() * 1.1f;
+
             if(!has_attribute(m_attributes, window_attributes::no_title_bar)) {
                 const animgui::bounds bar{ 0.0f, m_size.x, 0.0f, height };
                 const auto bar_uid = layout_proxy::push_region("title_bar"_id, bar).second;
 
-                bool& move = storage<bool>(bar_uid);
-                if(layout_proxy::region_pressed(key_code::left_button)) {
-                    move = true;
-                    m_operator.focus();
-                } else if(!layout_proxy::input_backend().get_key(key_code::left_button))
-                    move = false;
-
-                if(move && has_attribute(m_attributes, window_attributes::movable))
+                if(has_attribute(m_attributes, window_attributes::movable) && selected(*this, bar_uid)) {
                     m_operator.move(layout_proxy::input_backend().mouse_move());
+                }
 
                 layout_proxy::add_primitive("background"_id, canvas_fill_rect{ bar, style().background_color });
                 if(title.has_value())
@@ -319,6 +320,7 @@ namespace animgui {
     struct windows_info final {
         uid id;
         bounds bounds;
+        animgui::bounds absolute_bounds;
         bool is_open;
         bool auto_adjust;
         windows_info() = delete;
@@ -331,18 +333,19 @@ namespace animgui {
         std::pmr::vector<uid> m_close_requests;
         std::pmr::vector<std::pair<uid, vec2>> m_move_requests;
         std::pmr::vector<windows_info>& m_info;
+        uid m_current;
 
         [[nodiscard]] bounds default_bounds() const {
             const auto size = reserved_size();
             const auto cnt = static_cast<float>(m_info.size());
-            return { cnt * style().spacing.x, size.x, cnt * style().spacing.y, size.y };
+            return { cnt * style().font->height(), size.x, cnt * style().font->height(), size.y };
         }
 
         [[nodiscard]] windows_info& locate_window(const uid id) const {
             for(auto&& win : m_info)
                 if(win.id == id)
                     return win;
-            m_info.push_back({ id, default_bounds(), true, true });
+            m_info.push_back({ id, default_bounds(), { 0.0f, 0.0f, 0.0f, 0.0f }, true, true });
             return m_info.front();
         }
 
@@ -350,18 +353,19 @@ namespace animgui {
         explicit multiple_window_canvas_impl(canvas& parent)
             : multiple_window_canvas{ parent }, m_ranges{ parent.memory_resource() },
               m_focus_requests{ parent.memory_resource() }, m_open_requests{ parent.memory_resource() },
-              m_close_requests{ parent.memory_resource() }, m_move_requests{ parent.memory_resource() }, m_info{
-                  parent.storage<std::decay_t<decltype(m_info)>>(parent.region_sub_uid())
-              } {}
+              m_close_requests{ parent.memory_resource() }, m_move_requests{ parent.memory_resource() },
+              m_info{ parent.storage<std::decay_t<decltype(m_info)>>(parent.region_sub_uid()) }, m_current{ 0 } {}
         void new_window(const uid id, std::optional<std::pmr::string> title, const window_attributes attributes,
                         const std::function<void(window_canvas&)>& render_function) override {
-            if(auto& [_, bounds, is_open, auto_adjust] = locate_window(id); is_open) {
+            if(auto& [_, bounds, absolute_bounds, is_open, auto_adjust] = locate_window(id); is_open) {
                 multiple_window_operator operator_{ *this, id };
                 const auto beg = commands().size();
 
                 const auto size = reserved_size();
+                m_current = id;
                 push_region(id, animgui::bounds{ 0.0f, size.x, 0.0f, size.y });
-                window_canvas_impl canvas{ *this, bounds, std::move(title), attributes, operator_ };
+
+                window_canvas_impl canvas{ *this, bounds, std::move(title), attributes, operator_, &absolute_bounds };
                 render_function(canvas);
                 canvas.finish();
                 pop_region(std::nullopt);
@@ -394,6 +398,30 @@ namespace animgui {
                 }
             }
         }
+        [[nodiscard]] bool region_hovered() const override {
+            if(const auto current_bound = region_bounds(); !hovered(current_bound))
+                return false;
+            for(auto iter = m_info.rbegin(); iter != m_info.rend(); ++iter) {
+                if(iter->id == m_current) {
+                    break;
+                }
+                if(hovered(iter->absolute_bounds))
+                    return false;
+            }
+            return true;
+        }
+        [[nodiscard]] bool region_pressed(const key_code key) const override {
+            if(const auto current_bound = region_bounds(); !pressed(key, current_bound))
+                return false;
+            for(auto iter = m_info.rbegin(); iter != m_info.rend(); ++iter) {
+                if(iter->id == m_current) {
+                    break;
+                }
+                if(pressed(key, iter->absolute_bounds))
+                    return false;
+            }
+            return true;
+        }
         void close_window(const uid id) override {
             m_close_requests.push_back(id);
         }
@@ -423,26 +451,47 @@ namespace animgui {
                 }
             }
             for(auto&& id : m_close_requests) {
-                for(auto& [uid, bounds, is_open, auto_adjust] : m_info)
-                    if(id == uid) {
-                        is_open = false;
+                for(auto& win : m_info)
+                    if(id == win.id) {
+                        win.is_open = false;
                         break;
                     }
             }
             for(auto&& id : m_open_requests) {
-                for(auto& [uid, bounds, is_open, auto_adjust] : m_info)
-                    if(id == uid) {
-                        is_open = true;
+                for(auto& win : m_info)
+                    if(id == win.id) {
+                        win.is_open = true;
                         break;
                     }
             }
+
+            const auto size = reserved_size();
+
             for(auto&& [id, delta] : m_move_requests) {
-                for(auto& [uid, bounds, is_open, auto_adjust] : m_info)
-                    if(id == uid) {
-                        bounds.left += delta.x;
-                        bounds.right += delta.x;
-                        bounds.top += delta.y;
-                        bounds.bottom += delta.y;
+                for(auto& win : m_info)
+                    if(id == win.id) {
+                        win.bounds.left += delta.x;
+                        win.bounds.right += delta.x;
+                        win.bounds.top += delta.y;
+                        win.bounds.bottom += delta.y;
+                        if(win.bounds.right - win.bounds.left < size.x) {
+                            if(win.bounds.left < 0.0f) {
+                                win.bounds.right -= win.bounds.left;
+                                win.bounds.left = 0.0f;
+                            } else if(win.bounds.right > size.x) {
+                                win.bounds.left -= win.bounds.right - size.x;
+                                win.bounds.right = size.x;
+                            }
+                        }
+                        if(win.bounds.bottom - win.bounds.top < size.y) {
+                            if(win.bounds.top < 0.0f) {
+                                win.bounds.bottom -= win.bounds.top;
+                                win.bounds.top = 0.0f;
+                            } else if(win.bounds.bottom > size.y) {
+                                win.bounds.top -= win.bounds.bottom - size.y;
+                                win.bounds.bottom = size.y;
+                            }
+                        }
                         break;
                     }
             }
@@ -450,7 +499,7 @@ namespace animgui {
             const auto commands_range = commands();
             std::pmr::vector<operation> new_commands;
             new_commands.reserve(commands_range.size());
-            for(auto [id, bounds, is_open, _] : m_info) {
+            for(auto [id, bounds, _, is_open, __] : m_info) {
                 if(const auto iter = m_ranges.find(id); iter != m_ranges.cend()) {
                     const auto [beg, end] = iter->second;
                     new_commands.insert(new_commands.cend(), commands_range.begin() + beg, commands_range.begin() + end);
