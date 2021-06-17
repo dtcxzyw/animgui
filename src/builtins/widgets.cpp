@@ -16,6 +16,12 @@ namespace animgui {
         canvas.add_primitive("content"_id, std::move(text));
         canvas.pop_region();
     }
+    ANIMGUI_API bool clicked(canvas& canvas, const uid id, const bool pressed, const bool hovered) {
+        auto& last_pressed = canvas.storage<bool>(id);
+        const auto res = last_pressed && !pressed && hovered;
+        last_pressed = pressed;
+        return res;
+    }
     static bool button_with_content(canvas& canvas, const std::function<void(animgui::canvas&)>& render_function) {
         canvas.push_region(canvas.region_sub_uid());
         const auto hovered = canvas.region_hovered() || canvas.region_request_focus();
@@ -25,9 +31,7 @@ namespace animgui {
             button_base{ { 0.0f, 0.0f },
                          { 0.0f, 0.0f },
                          pressed ? button_status::pressed : (hovered ? button_status::hovered : button_status::normal) });
-        auto& last_pressed = canvas.storage<bool>(uid);
-        const auto clicked = last_pressed && !pressed && hovered;
-        last_pressed = pressed;
+        const auto res = clicked(canvas, uid, pressed, hovered);
         canvas.push_region(canvas.region_sub_uid());
         const auto content_size = layout_row(canvas, row_alignment::left, render_function);
         auto&& inst = std::get<button_base>(std::get<primitive>(canvas.commands()[idx]));
@@ -37,7 +41,7 @@ namespace animgui {
         const auto padding_y = (h - content_size.y) / 2.0f;
         canvas.pop_region(bounds{ padding_x, padding_x + content_size.x, padding_y, padding_y + content_size.y });
         canvas.pop_region(bounds{ 0.0f, w, 0.0f, h });
-        return clicked;
+        return res;
     }
     ANIMGUI_API bool button_label(canvas& canvas, std::pmr::string label) {
         return button_with_content(canvas, [&](animgui::canvas& sub_canvas) { text(sub_canvas, std::move(label)); });
@@ -84,6 +88,7 @@ namespace animgui {
         auto&& [edit, override_mode, pos_beg, pos_end, offset] = state;
 
         if(selected(canvas, uid)) {
+            // TODO: select
             edit = true;
 
             const auto pos = canvas.input_backend().get_cursor_pos().x;
@@ -115,7 +120,6 @@ namespace animgui {
             auto& input_backend = canvas.input_backend();
             std::pmr::string::const_iterator beg, end;
 
-            // TODO: lazy evaluation
             const auto update_iterator = [&] {
                 beg = str.cbegin();
                 utf8::advance(beg, state.pos_beg, str.cend());
@@ -223,7 +227,6 @@ namespace animgui {
                     insert_to({ text.data(), static_cast<size_t>(iter - text.begin()) }, false);
                 }
             }
-            // TODO: select
         }
 
         auto active = edit | canvas.region_request_focus();  // TODO: focus
@@ -235,7 +238,7 @@ namespace animgui {
 
         canvas.add_primitive(
             "background"_id,
-            canvas_stroke_rect{ full_bounds, active ? style.highlight_color : style.background_color, style.bounds_edge_width });
+            canvas_stroke_rect{ full_bounds, active ? style.highlight_color : style.normal_color, style.bounds_edge_width });
         if(edit) {
             float start_pos = style.padding.x + offset;
             float end_pos = style.padding.x + offset;
@@ -303,6 +306,56 @@ namespace animgui {
             "content"_id,
             canvas_text{ { offset, 0.0f }, std::move(text), style.font, str.empty() ? style.disabled_color : style.font_color });
         canvas.pop_region();
+
+        canvas.pop_region();
+    }
+    ANIMGUI_API void checkbox(canvas& canvas, std::pmr::string label, bool& state) {
+        const auto id = canvas.push_region(canvas.region_sub_uid()).second;
+        const auto hovered = canvas.region_hovered();
+
+        if(clicked(canvas, id, canvas.region_pressed(key_code::left_button), hovered))
+            state = !state;
+
+        const auto active = canvas.region_request_focus() || hovered;
+
+        auto&& style = canvas.style();
+        const auto size = style.font->height();
+
+        const bounds box = { style.padding.x, style.padding.x + size, style.padding.y, style.padding.y + size };
+        canvas.push_region("box"_id, box);
+        canvas.add_primitive("bounds"_id,
+                             canvas_stroke_rect{ { 0.0f, size, 0.0f, size },
+                                                 active ? style.highlight_color : style.normal_color,
+                                                 style.bounds_edge_width });
+
+        if(state) {
+            const auto quarter = size * 0.15f;
+            canvas.add_primitive("selected"_id,
+                                 canvas_fill_rect{ { quarter, size - quarter, quarter, size - quarter }, style.highlight_color });
+        }
+        canvas.pop_region();
+
+        primitive text =
+            canvas_text{ { size + 2.0f * style.padding.x, style.padding.y }, std::move(label), style.font, style.font_color };
+        const auto [w, h] = canvas.calculate_bounds(text);
+        canvas.add_primitive("label"_id, std::move(text));
+        canvas.pop_region(bounds{ 0.0f, w + size + 2.0f * style.padding.x, 0.0f, h + style.padding.y });
+    }
+    ANIMGUI_API void progressbar(canvas& canvas, const float width, const float progress, std::optional<std::pmr::string> label) {
+        auto&& style = canvas.style();
+        const bounds box{ 0.0f, width, 0.0f, 2.0f * style.padding.y + style.font->height() };
+        canvas.push_region("bounds"_id, box);
+        canvas.add_primitive("base"_id, canvas_fill_rect{ box, style.highlight_color });
+        // TODO: color mapping
+        canvas.add_primitive("progress"_id,
+                             canvas_fill_rect{ { 0.0f, width * progress, 0.0f, box.bottom }, style.disabled_color });
+        canvas.add_primitive("bounds"_id, canvas_stroke_rect{ box, style.normal_color, style.bounds_edge_width });
+        if(label.has_value()) {
+            primitive text = canvas_text{ { 0.0f, style.padding.y }, std::move(label).value(), style.font, style.font_color };
+            const auto text_width = canvas.calculate_bounds(text).x;
+            std::get<canvas_text>(text).pos.x = (width - text_width) / 2.0f;
+            canvas.add_primitive("label"_id, std::move(text));
+        }
 
         canvas.pop_region();
     }

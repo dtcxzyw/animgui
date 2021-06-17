@@ -108,5 +108,6 @@ namespace animgui {
     ANIMGUI_API void table(canvas& parent, const std::pmr::vector<row_alignment>& columns,
                            const std::function<void(table_canvas&)>& render_function);
     ANIMGUI_API void tree(canvas& parent, const std::function<void(canvas&)>& render_function);
+    // TODO: sortable
 
 }  // namespace animgui

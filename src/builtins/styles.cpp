@@ -16,8 +16,8 @@ namespace animgui {
         style.font_color = { 1.0f, 1.0f, 1.0f, 1.0f };
         style.panel_background_color = { 0.6f, 0.6f, 0.6f, 1.0f };
         style.background_color = { 0.3f, 0.3f, 0.3f, 1.0f };
-        style.normal_color = { 0.25f, 0.25f, 0.25f, 1.0f };
-        style.highlight_color = { 0.5f, 0.5f, 0.5f, 1.0f };
+        style.normal_color = { 0.5f, 0.5f, 0.5f, 1.0f };
+        style.highlight_color = { 0.25f, 0.25f, 0.25f, 1.0f };
         style.disabled_color = { 0.2f, 0.2f, 0.2f, 1.0f };
         style.selected_color = { 0.2f, 0.2f, 0.8f, 1.0f };
     }

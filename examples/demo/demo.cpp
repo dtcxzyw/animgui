@@ -12,11 +12,12 @@
 
 namespace animgui {
     class demo final : public application {
-        uint32_t m_count;
+        uint32_t m_count = 0;
         std::pmr::string m_text;
+        bool m_state = false;
 
     public:
-        explicit demo(context& context) : m_count{ 0 } {
+        explicit demo(context& context) {
             auto&& style = context.style();
             style.font = context.load_font("msyh", 30.0f);
         }
@@ -84,6 +85,15 @@ namespace animgui {
                                 }
                                 layout.newline();
                                 text_edit(layout, 20.0f, m_text, "input");
+                                layout.newline();
+                                checkbox(layout, "checkbox", m_state);
+                                layout.newline();
+                                using clock = std::chrono::high_resolution_clock;
+                                constexpr auto second = clock::period::den;
+                                progressbar(layout, 300.0f,
+                                            static_cast<float>(clock::now().time_since_epoch().count() % second) /
+                                                static_cast<float>(second),
+                                            std::nullopt);
                                 layout.newline();
                                 if(button_label(layout, "game pad")) {
                                     manager.open_window("game_pad"_id);
