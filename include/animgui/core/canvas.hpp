@@ -38,6 +38,7 @@ namespace animgui {
 
         // TODO: convex polygon/SDF bounds
         [[nodiscard]] virtual const bounds& region_bounds() const = 0;
+        [[nodiscard]] virtual vec2 region_offset() const = 0;
         [[nodiscard]] virtual bool region_hovered() const = 0;
         [[nodiscard]] virtual bool region_pressed(key_code key) const = 0;
         [[nodiscard]] virtual bool hovered(const bounds& bounds) const = 0;

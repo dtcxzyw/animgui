@@ -73,30 +73,54 @@ namespace animgui {
 
         struct edit_state final {
             bool edit;
-            bool insert;
+            bool override_mode;
             size_t pos_beg;
             size_t pos_end;
             float offset;
-            edit_state() noexcept : edit{ false }, insert{ false }, pos_beg{ 0 }, pos_end{ 0 }, offset{ 0.0f } {}
+            edit_state() noexcept : edit{ false }, override_mode{ false }, pos_beg{ 0 }, pos_end{ 0 }, offset{ 0.0f } {}
         };
 
         auto&& state = canvas.storage<edit_state>(uid);
-        auto&& [edit, insert, pos_beg, pos_end, offset] = state;
+        auto&& [edit, override_mode, pos_beg, pos_end, offset] = state;
 
         if(selected(canvas, uid)) {
             edit = true;
-            pos_beg = pos_end = 0;  // TODO: select
-            insert = false;
+
+            const auto pos = canvas.input_backend().get_cursor_pos().x;
+            auto current_pos = canvas.region_offset().x + style.padding.x + offset;
+
+            pos_beg = 0;
+            auto iter = str.cbegin();
+            glyph prev{ 0 };
+            while(iter != str.cend()) {
+                const auto cp = utf8::next(iter, str.cend());
+                const auto glyph = style.font->to_glyph(cp);
+                const auto distance = style.font->calculate_advance(glyph, prev);
+                current_pos += distance;
+                if(current_pos > pos)
+                    break;
+                prev = glyph;
+                ++pos_beg;
+            }
+
+            pos_end = pos_beg;
+
+        } else if(edit && canvas.input_backend().get_key(key_code::left_button)) {
+            edit = false;
+            offset = 0.0f;
+            override_mode = false;
         }
 
         if(edit) {
             auto& input_backend = canvas.input_backend();
-            std::pmr::string::iterator beg, end;
+            std::pmr::string::const_iterator beg, end;
 
+            // TODO: lazy evaluation
             const auto update_iterator = [&] {
-                beg = end = str.begin();
-                utf8::advance(beg, state.pos_beg, str.end());
-                utf8::advance(end, state.pos_end, str.end());
+                beg = str.cbegin();
+                utf8::advance(beg, state.pos_beg, str.cend());
+                end = beg;
+                utf8::advance(end, state.pos_end - state.pos_beg, str.cend());
             };
 
             update_iterator();
@@ -114,12 +138,22 @@ namespace animgui {
                     return;
                 input_backend.set_clipboard_text(std::pmr::string{ beg, end, canvas.memory_resource() });
             };
-            const auto insert_to = [&](const std::string_view text, const bool select) {
+            const auto insert_to = [&, override_ = override_mode](const std::string_view text, const bool select) {
                 if(state.pos_beg != state.pos_end)
                     delete_selected();
 
-                str.insert(beg, text.begin(), text.end());
-                const auto size = utf8::distance(text.begin(), text.end());
+                const auto size = static_cast<size_t>(utf8::distance(text.cbegin(), text.cend()));
+                if(override_) {
+                    auto iter = beg;
+                    size_t cnt = 0;
+                    while(iter != str.end() && cnt < size) {
+                        utf8::next(iter, str.cend());
+                        ++cnt;
+                    }
+                    str.erase(beg, iter);
+                }
+
+                str.insert(beg, text.cbegin(), text.cend());
                 state.pos_end = state.pos_beg + size;
                 if(!select)
                     state.pos_beg = state.pos_end;
@@ -127,17 +161,17 @@ namespace animgui {
                 update_iterator();
             };
 
-            if(input_backend.get_key_pulse(key_code::insert, false))
-                insert = !insert;
-            else if(input_backend.get_key_pulse(key_code::back, true)) {
-                if(pos_beg == pos_end && beg != str.begin()) {
-                    utf8::prior(beg, str.begin());
+            if(input_backend.get_key_pulse(key_code::insert, false)) {
+                override_mode = !override_mode;
+            } else if(input_backend.get_key_pulse(key_code::back, true)) {
+                if(pos_beg == pos_end && beg != str.cbegin()) {
+                    utf8::prior(beg, str.cbegin());
                     --pos_beg;
                 }
                 delete_selected();
             } else if(input_backend.get_key_pulse(key_code::delete_, true)) {
-                if(pos_beg == pos_end && end != str.end()) {
-                    utf8::next(end, str.end());
+                if(pos_beg == pos_end && end != str.cend()) {
+                    utf8::next(end, str.cend());
                     ++pos_end;
                 }
                 delete_selected();
@@ -145,7 +179,7 @@ namespace animgui {
                 if(pos_beg == pos_end) {
                     if(pos_beg >= 1) {
                         pos_end = --pos_beg;
-                        utf8::prior(beg, str.begin());
+                        utf8::prior(beg, str.cbegin());
                         end = beg;
                     }
                 } else {
@@ -154,9 +188,9 @@ namespace animgui {
                 }
             } else if(input_backend.get_key_pulse(key_code::right, true)) {
                 if(pos_beg == pos_end) {
-                    if(end != str.end()) {
+                    if(end != str.cend()) {
                         pos_beg = ++pos_end;
-                        utf8::next(end, str.end());
+                        utf8::next(end, str.cend());
                         beg = end;
                     }
                 } else {
@@ -176,9 +210,9 @@ namespace animgui {
             } else if(input_backend.get_key_pulse(key_code::alpha_a, false) &&
                       input_backend.get_modifier_key(modifier_key::control)) {
                 pos_beg = 0;
-                pos_end = utf8::distance(str.begin(), str.end());
-                beg = str.begin();
-                end = str.end();
+                pos_end = utf8::distance(str.cbegin(), str.cend());
+                beg = str.cbegin();
+                end = str.cend();
             } else {
                 if(const auto seq = input_backend.get_input_characters(); seq.size()) {
                     std::pmr::string text{ canvas.memory_resource() };
@@ -192,7 +226,7 @@ namespace animgui {
             // TODO: select
         }
 
-        auto active = edit | canvas.region_request_focus();
+        auto active = edit | canvas.region_request_focus();  // TODO: focus
 
         if(canvas.region_hovered()) {
             canvas.input_backend().set_cursor(cursor::edit);
@@ -205,7 +239,6 @@ namespace animgui {
         if(edit) {
             float start_pos = style.padding.x + offset;
             float end_pos = style.padding.x + offset;
-            bool is_end = true;
             glyph prev{ 0 };
             size_t current_pos = 0;
             auto iter = str.cbegin();
@@ -213,26 +246,28 @@ namespace animgui {
                 const auto cp = utf8::next(iter, str.cend());
                 const auto glyph = style.font->to_glyph(cp);
                 const auto distance = style.font->calculate_advance(glyph, prev);
+                if(override_mode && current_pos == pos_end) {
+                    end_pos += distance;
+                    break;
+                }
                 if(current_pos < pos_beg)
                     start_pos += distance;
                 if(current_pos < pos_end)
                     end_pos += distance;
                 prev = glyph;
                 ++current_pos;
-                if(current_pos == pos_end) {
-                    is_end = iter == str.cend();
+                if(current_pos == pos_end && !override_mode)
                     break;
-                }
             }
 
-            if(pos_beg == pos_end && (!insert || is_end)) {
+            if(pos_beg == pos_end) {
 
                 if(start_pos < style.padding.x) {
                     offset += style.padding.x - start_pos;
                     start_pos = style.padding.x;
-                } else if(const auto end = width - style.padding.x; start_pos > end) {
-                    offset -= start_pos - end;
-                    start_pos = end;
+                } else if(const auto end = width - style.padding.x; end_pos > end) {
+                    offset -= end_pos - end;
+                    end_pos = end;
                 }
 
                 using clock = std::chrono::high_resolution_clock;
@@ -240,11 +275,17 @@ namespace animgui {
                 constexpr auto one_second = static_cast<uint64_t>(clock::period::den);
 
                 if(static_cast<uint64_t>(clock::now().time_since_epoch().count()) % one_second > one_second / 2) {
-                    canvas.add_primitive("cursor"_id,
-                                         canvas_line{ { start_pos, style.padding.y },
-                                                      { start_pos, style.padding.y + style.font->height() },
-                                                      style.highlight_color,
-                                                      style.bounds_edge_width });
+                    if(override_mode && std::fabs(start_pos - end_pos) > 0.01f) {
+                        canvas.add_primitive("cursor"_id,
+                                             canvas_fill_rect{ bounds{ start_pos, end_pos, style.padding.y,
+                                                                       style.padding.y + style.font->height() },
+                                                               style.highlight_color });
+                    } else
+                        canvas.add_primitive("cursor"_id,
+                                             canvas_line{ { start_pos, style.padding.y },
+                                                          { start_pos, style.padding.y + style.font->height() },
+                                                          style.highlight_color,
+                                                          style.bounds_edge_width });
                 }
             } else {
                 canvas.add_primitive(

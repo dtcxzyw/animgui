@@ -69,6 +69,10 @@ namespace animgui {
         return m_parent.input_backend();
     }
 
+    vec2 layout_proxy::region_offset() const {
+        return m_parent.region_offset();
+    }
+
     class row_layout_canvas_impl final : public row_layout_canvas {
         row_alignment m_alignment;
         uint32_t m_current_depth = 0;

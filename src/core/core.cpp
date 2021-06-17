@@ -312,6 +312,9 @@ namespace animgui {
                 }
             }
         }
+        vec2 region_offset() const override {
+            return m_region_stack.back().offset;
+        }
     };
 
     // TODO: improve performance

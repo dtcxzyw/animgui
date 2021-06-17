@@ -32,6 +32,7 @@ namespace animgui {
         uid region_sub_uid() override;
         [[nodiscard]] animgui::input_backend& input_backend() const noexcept override;
         bool region_request_focus(bool force) override;
+        [[nodiscard]] vec2 region_offset() const final;
     };
 
     // TODO: indent/separate
