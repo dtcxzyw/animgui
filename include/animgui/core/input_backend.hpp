@@ -122,27 +122,35 @@ namespace animgui {
         input_backend& operator=(input_backend&&) = default;
         virtual ~input_backend() = default;
 
-        virtual void set_clipboard_text(const std::pmr::string& str) = 0;
-        virtual std::pmr::string get_clipboard_text() = 0;
+        virtual void new_frame() = 0;
+        [[nodiscard]] virtual input_mode get_input_mode() const noexcept = 0;
 
-        [[nodiscard]] virtual span<const uint32_t> get_input_characters() const noexcept = 0;
-        [[nodiscard]] virtual vec2 get_cursor_pos() const = 0;
-        [[nodiscard]] virtual bool get_key(key_code code) const = 0;
-        [[nodiscard]] virtual bool get_key_pulse(key_code code, bool allow_repeated) const = 0;
-        [[nodiscard]] virtual bool get_modifier_key(modifier_key code) const = 0;
         virtual void close_window() = 0;
         virtual void minimize_window() = 0;
         virtual void maximize_window() = 0;
         virtual void move_window(int32_t dx, int32_t dy) = 0;
+        virtual void focus_window() = 0;
+
+        virtual void set_clipboard_text(const std::pmr::string& str) = 0;
+        virtual std::pmr::string get_clipboard_text() = 0;
+        [[nodiscard]] virtual span<const uint32_t> get_input_characters() const noexcept = 0;
+
+        [[nodiscard]] virtual vec2 get_cursor_pos() const = 0;
         [[nodiscard]] virtual vec2 mouse_move() const noexcept = 0;
         [[nodiscard]] virtual vec2 scroll() const noexcept = 0;
-        virtual void new_frame() = 0;
+        virtual void set_cursor(cursor cursor) noexcept = 0;
+
+        [[nodiscard]] virtual bool get_key(key_code code) const = 0;
+        [[nodiscard]] virtual bool get_key_pulse(key_code code, bool allow_repeated) const = 0;
+        [[nodiscard]] virtual bool get_modifier_key(modifier_key code) const = 0;
+
         [[nodiscard]] virtual std::pmr::string get_game_pad_name(size_t idx) const = 0;
         [[nodiscard]] virtual span<const size_t> list_game_pad() const noexcept = 0;
         [[nodiscard]] virtual const game_pad_state& get_game_pad_state(size_t idx) const noexcept = 0;
-        [[nodiscard]] virtual input_mode get_input_mode() const noexcept = 0;
-        virtual void set_cursor(cursor cursor) noexcept = 0;
-        virtual void focus_window() = 0;
+
         // TODO: drop
+
+        [[nodiscard]] virtual bool action_press() const noexcept = 0;
+        [[nodiscard]] virtual vec2 action_direction_pulse_repeated(bool navigation = false) const noexcept = 0;
     };
 }  // namespace animgui

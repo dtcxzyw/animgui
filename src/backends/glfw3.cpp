@@ -208,6 +208,7 @@ namespace animgui {
     }
     class glfw3_backend final : public input_backend {
         static constexpr auto game_pad_axis_eps = 0.08f;
+        using clock = std::chrono::high_resolution_clock;
 
         GLFWwindow* m_window;
         vec2 m_cursor_pos;
@@ -221,6 +222,10 @@ namespace animgui {
 
         game_pad_state m_game_pad_state[GLFW_JOYSTICK_LAST + 1];
         std::pmr::vector<size_t> m_available_game_pad;
+
+        vec2 m_direction;
+        clock::time_point m_last_time;
+        vec2 m_direction_navigation;
 
         const std::function<void()>& m_redraw;
 
@@ -251,7 +256,10 @@ namespace animgui {
     public:
         explicit glfw3_backend(GLFWwindow* window, const std::function<void()>& redraw)
             : m_window{ window }, m_cursor_pos{ 0.0f, 0.0f }, m_mouse_move{ 0.0f, 0.0f }, m_scroll{ 0.0f, 0.0f }, m_key_state{},
-              m_input_mode{ input_mode::mouse }, m_cursor{ cursor::arrow }, m_game_pad_state{}, m_redraw{ redraw } {
+              m_key_state_pulse{}, m_key_state_pulse_repeated{}, m_input_mode{ input_mode::mouse }, m_cursor{ cursor::arrow },
+              m_game_pad_state{}, m_direction{ 0.0f, 0.0f }, m_last_time{}, m_direction_navigation{ 0.0f, 0.0f }, m_redraw{
+                  redraw
+              } {
             m_available_game_pad.reserve(std::size(m_game_pad_state));
             glfwSetWindowUserPointer(m_window, this);
             glfwSetCharCallback(m_window, [](GLFWwindow* const win, const unsigned int cp) {
@@ -367,6 +375,40 @@ namespace animgui {
             m_input_characters.clear();
             memset(m_key_state_pulse, 0, sizeof(m_key_state_pulse));
             memset(m_key_state_pulse_repeated, 0, sizeof(m_key_state_pulse_repeated));
+
+            auto&& state = m_game_pad_state[0];
+
+            const auto current = clock::now();
+            using namespace std::chrono_literals;
+            if(m_last_time + 200ms > current)
+                m_direction_navigation = { 0.0f, 0.0f };
+            else {
+                m_direction_navigation = state.left_axis;
+
+                if(state.d_pad_left)
+                    m_direction_navigation.x = -1.0f;
+                if(state.d_pad_right)
+                    m_direction_navigation.x = 1.0f;
+                if(state.d_pad_up)
+                    m_direction_navigation.y = -1.0f;
+                if(state.d_pad_down)
+                    m_direction_navigation.y = 1.0f;
+
+                m_last_time = current;
+            }
+
+            glfwPollEvents();
+
+            m_direction = m_direction_navigation;
+
+            if(get_key_pulse(key_code::left, true))
+                m_direction.x = -1.0f;
+            if(get_key_pulse(key_code::right, true))
+                m_direction.x = 1.0f;
+            if(get_key_pulse(key_code::up, true))
+                m_direction.y = -1.0f;
+            if(get_key_pulse(key_code::down, true))
+                m_direction.y = 1.0f;
         }
         [[nodiscard]] std::pmr::string get_game_pad_name(const size_t idx) const override {
             return glfwGetGamepadName(static_cast<int>(idx));
@@ -403,6 +445,15 @@ namespace animgui {
         }
         [[nodiscard]] bool get_key_pulse(key_code code, const bool allow_repeated) const override {
             return (allow_repeated ? m_key_state_pulse_repeated : m_key_state_pulse)[static_cast<uint32_t>(code)];
+        }
+
+        [[nodiscard]] bool action_press() const noexcept override {
+            // TODO: game_pad
+            return get_key(key_code::left_button) || m_game_pad_state[0].x;
+        }
+
+        [[nodiscard]] vec2 action_direction_pulse_repeated(const bool navigation) const noexcept override {
+            return navigation ? m_direction_navigation : m_direction;
         }
     };
 

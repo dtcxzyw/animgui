@@ -14,10 +14,11 @@ namespace animgui {
     class demo final : public application {
         uint32_t m_count = 0;
         std::pmr::string m_text;
-        bool m_state = false;
+        bool m_checkbox_state = false;
         size_t m_index = 0;
         int32_t m_int_value = 0;
         float m_float_value = 0.0f;
+        bool m_switch_state = false;
 
     public:
         explicit demo(context& context) {
@@ -89,7 +90,7 @@ namespace animgui {
                                 layout.newline();
                                 text_edit(layout, 20.0f, m_text, "input");
                                 layout.newline();
-                                checkbox(layout, "checkbox", m_state);
+                                checkbox(layout, "checkbox", m_checkbox_state);
                                 layout.newline();
                                 using clock = std::chrono::high_resolution_clock;
                                 constexpr auto second = clock::period::den;
@@ -105,6 +106,9 @@ namespace animgui {
                                 layout.newline();
                                 text(layout, std::pmr::string{ "value: " + std::to_string(m_float_value) });
                                 slider(layout, 300.0f, 20.0f, m_float_value, 0.0f, 10.0f);
+                                layout.newline();
+                                text(layout, "switch");
+                                switch_(layout, m_switch_state);
                                 layout.newline();
                                 if(button_label(layout, "game pad")) {
                                     manager.open_window("game_pad"_id);

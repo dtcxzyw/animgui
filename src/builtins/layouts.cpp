@@ -22,9 +22,6 @@ namespace animgui {
     bool layout_proxy::region_hovered() const {
         return m_parent.region_hovered();
     }
-    bool layout_proxy::region_pressed(const key_code key) const {
-        return m_parent.region_pressed(key);
-    }
     void layout_proxy::register_type(const size_t hash, const size_t size, const size_t alignment, const raw_callback ctor,
                                      const raw_callback dtor) {
         m_parent.register_type(hash, size, alignment, ctor, dtor);
@@ -35,9 +32,6 @@ namespace animgui {
     std::pair<size_t, uid> layout_proxy::push_region(const uid uid, const std::optional<bounds>& reserved_bounds) {
         const auto [idx, id] = m_parent.push_region(uid, reserved_bounds);
         return { idx - m_offset, id };
-    }
-    bool layout_proxy::pressed(const key_code key, const bounds& bounds) const {
-        return m_parent.pressed(key, bounds);
     }
     std::pair<size_t, uid> layout_proxy::add_primitive(const uid uid, primitive primitive) {
         const auto [idx, id] = m_parent.add_primitive(uid, std::move(primitive));
@@ -447,17 +441,25 @@ namespace animgui {
             }
             return true;
         }
-        [[nodiscard]] bool region_pressed(const key_code key) const override {
-            if(const auto current_bound = region_bounds(); !pressed(key, current_bound))
-                return false;
+        bool region_request_focus(const bool force) override {
+            if(force) {
+                m_focus_requests.push_back(m_current);
+                return layout_proxy::region_request_focus(true);
+            }
+            const auto bounds = region_bounds();
+
             for(auto iter = m_info.rbegin(); iter != m_info.rend(); ++iter) {
                 if(iter->id == m_current) {
                     break;
                 }
-                if(iter->is_open && pressed(key, iter->absolute_bounds))
+
+                if(const auto [l, r, t, b] = iter->absolute_bounds;
+                   iter->is_open && l <= bounds.left && bounds.right <= r && t <= bounds.top && bounds.bottom <= b) {
                     return false;
+                }
             }
-            return true;
+
+            return layout_proxy::region_request_focus(false);
         }
         void close_window(const uid id) override {
             m_close_requests.push_back(id);

@@ -17,7 +17,7 @@ namespace animgui {
             switch(status) {
                 case button_status::disabled:
                     return style.disabled_color;
-                case button_status::hovered:
+                case button_status::focused:
                     return style.highlight_color;
                 default:
                     return style.normal_color;

@@ -198,12 +198,6 @@ namespace animgui {
                 { idx, mixed, std::minstd_rand{ static_cast<unsigned>(mixed.id) }, last_bounds, parent.offset + offset });
             return { idx, mixed };
         }
-        [[nodiscard]] bool pressed(const key_code key, const bounds& bounds) const override {
-            return m_input_backend.get_key(key) && hovered(bounds);
-        }
-        [[nodiscard]] bool region_pressed(const key_code key) const override {
-            return pressed(key, region_bounds());
-        }
         [[nodiscard]] const bounds& region_bounds() const override {
             return m_region_stack.back().absolute_bounds;
         }
@@ -250,6 +244,7 @@ namespace animgui {
             return last_focus == current;
         }
         void finish() {
+            // TODO: mode switching
             uid& last_focus = storage<uid>("glabal_focus"_id);
             if(m_input_mode != input_mode::game_pad || m_focusable_region.empty()) {
                 last_focus = uid{ 0 };
@@ -274,21 +269,11 @@ namespace animgui {
                 last_focus = init->first;
             }
 
-            // TODO: idx
-            const auto& axis = m_input_backend.get_game_pad_state(0);
-            auto dir = axis.left_axis;
-            using Clock = std::chrono::high_resolution_clock;
-            auto& last_move = storage<Clock::time_point>("last_game_pad_focus_move"_id);
+            auto dir = m_input_backend.action_direction_pulse_repeated(true);
 
             if(dir.x * dir.x + dir.y * dir.y < 0.25f) {
-                last_move = {};
                 return;
             }
-
-            const auto current = Clock::now();
-            using namespace std::chrono_literals;
-            if(last_move + 500ms > current)
-                return;
 
             const auto norm = std::hypot(dir.x, dir.y);
             dir.x /= norm;
@@ -308,11 +293,10 @@ namespace animgui {
                 if(const auto diameter = (diff.x * diff.x + diff.y * diff.y) / std::pow(dot, 1.4f); diameter < min_dist) {
                     min_dist = diameter;
                     last_focus = id;
-                    last_move = current;
                 }
             }
         }
-        vec2 region_offset() const override {
+        [[nodiscard]] vec2 region_offset() const override {
             return m_region_stack.back().offset;
         }
     };

@@ -17,22 +17,22 @@ namespace animgui {
         canvas.add_primitive("content"_id, std::move(text));
         canvas.pop_region();
     }
-    ANIMGUI_API bool clicked(canvas& canvas, const uid id, const bool pressed, const bool hovered) {
+    ANIMGUI_API bool clicked(canvas& canvas, const uid id, const bool pressed, const bool focused) {
         auto& last_pressed = canvas.storage<bool>(id);
-        const auto res = last_pressed && !pressed && hovered;
+        const auto res = last_pressed && !pressed && focused;
         last_pressed = pressed;
         return res;
     }
     static bool button_with_content(canvas& canvas, const std::function<void(animgui::canvas&)>& render_function) {
         canvas.push_region(canvas.region_sub_uid());
-        const auto hovered = canvas.region_hovered() || canvas.region_request_focus();
-        const auto pressed = canvas.region_pressed(key_code::left_button);
+        const auto focused = canvas.region_request_focus() || canvas.region_hovered();
+        const auto pressed = focused && canvas.input_backend().action_press();
         auto [idx, uid] = canvas.add_primitive(
             "button_base"_id,
             button_base{ { 0.0f, 0.0f },
                          { 0.0f, 0.0f },
-                         pressed ? button_status::pressed : (hovered ? button_status::hovered : button_status::normal) });
-        const auto res = clicked(canvas, uid, pressed, hovered);
+                         pressed ? button_status::pressed : (focused ? button_status::focused : button_status::normal) });
+        const auto res = clicked(canvas, uid, pressed, focused);
         canvas.push_region(canvas.region_sub_uid());
         const auto content_size = layout_row(canvas, row_alignment::left, render_function);
         auto&& inst = std::get<button_base>(std::get<primitive>(canvas.commands()[idx]));
@@ -60,11 +60,11 @@ namespace animgui {
     }
     ANIMGUI_API bool selected(canvas& canvas, const uid id) {
         auto& [state, pressed] = canvas.storage<std::pair<bool, bool>>(mix(id, "selected"_id));
-        if(canvas.region_hovered() && !pressed && canvas.region_pressed(key_code::left_button)) {
+        if(canvas.region_hovered() && !pressed && canvas.input_backend().action_press()) {
             state = true;
-        } else if(!canvas.input_backend().get_key(key_code::left_button))
+        } else if(!canvas.input_backend().action_press())
             state = false;
-        pressed = canvas.input_backend().get_key(key_code::left_button);
+        pressed = canvas.input_backend().action_press();
         return state;
     }
     ANIMGUI_API void text_edit(canvas& canvas, const float glyph_width, std::pmr::string& str,
@@ -111,7 +111,7 @@ namespace animgui {
 
             pos_end = pos_beg;
 
-        } else if(edit && canvas.input_backend().get_key(key_code::left_button)) {
+        } else if(edit && canvas.input_backend().action_press()) {
             edit = false;
             offset = 0.0f;
             override_mode = false;
@@ -166,6 +166,8 @@ namespace animgui {
                 update_iterator();
             };
 
+            const auto dir = input_backend.action_direction_pulse_repeated();
+
             if(input_backend.get_key_pulse(key_code::insert, false)) {
                 override_mode = !override_mode;
             } else if(input_backend.get_key_pulse(key_code::back, true)) {
@@ -180,7 +182,7 @@ namespace animgui {
                     ++pos_end;
                 }
                 delete_selected();
-            } else if(input_backend.get_key_pulse(key_code::left, true)) {
+            } else if(dir.x == -1.0f) {
                 if(pos_beg == pos_end) {
                     if(pos_beg >= 1) {
                         pos_end = --pos_beg;
@@ -191,7 +193,7 @@ namespace animgui {
                     pos_end = pos_beg;
                     end = beg;
                 }
-            } else if(input_backend.get_key_pulse(key_code::right, true)) {
+            } else if(dir.x == 1.0f) {
                 if(pos_beg == pos_end) {
                     if(end != str.cend()) {
                         pos_beg = ++pos_end;
@@ -312,12 +314,10 @@ namespace animgui {
     }
     ANIMGUI_API void checkbox(canvas& canvas, std::pmr::string label, bool& state) {
         const auto id = canvas.push_region(canvas.region_sub_uid()).second;
-        const auto hovered = canvas.region_hovered();
+        const auto focused = canvas.region_request_focus() || canvas.region_hovered();
 
-        if(clicked(canvas, id, canvas.region_pressed(key_code::left_button), hovered))
+        if(clicked(canvas, id, focused && canvas.input_backend().action_press(), focused))
             state = !state;
-
-        const auto active = canvas.region_request_focus() || hovered;
 
         auto&& style = canvas.style();
         const auto size = style.font->height();
@@ -326,7 +326,7 @@ namespace animgui {
         canvas.push_region("box"_id, box);
         canvas.add_primitive("bounds"_id,
                              canvas_stroke_rect{ { 0.0f, size, 0.0f, size },
-                                                 active ? style.highlight_color : style.normal_color,
+                                                 focused ? style.highlight_color : style.normal_color,
                                                  style.bounds_edge_width });
 
         if(state) {
@@ -369,12 +369,12 @@ namespace animgui {
 
         for(size_t i = 0; i < labels.size(); ++i) {
             canvas.push_region(canvas.region_sub_uid());
-            const auto hovered = canvas.region_hovered() || canvas.region_request_focus();
-            const auto pressed = canvas.region_pressed(key_code::left_button) || index == i;
+            const auto focused = canvas.region_request_focus() || canvas.region_hovered();
+            const auto pressed = canvas.input_backend().action_press() || index == i;
             auto [idx, uid] = canvas.add_primitive(
                 "button_base"_id,
-                button_base{ { 0.0f, 0.0f }, { 0.0f, 0.0f }, hovered ? button_status::hovered : button_status::normal });
-            if(clicked(canvas, uid, pressed, hovered))
+                button_base{ { 0.0f, 0.0f }, { 0.0f, 0.0f }, focused ? button_status::focused : button_status::normal });
+            if(clicked(canvas, uid, pressed, focused))
                 index = i;
             primitive text =
                 canvas_text{ { 0.0f, 0.0f }, labels[i], style.font, index == i ? style.font_color : style.normal_color };
@@ -412,7 +412,7 @@ namespace animgui {
 
         assert(min <= val && val <= max);
         auto& progress = canvas.storage<float>(full_uid);
-        bool hovered = false;
+        bool focused = false;
 
         const auto half_width = handle_width / 2.0f;
         assert(width > handle_width);
@@ -423,18 +423,18 @@ namespace animgui {
                 1.0f,
                 std::fmax(0.0f, (canvas.input_backend().get_cursor_pos().x - canvas.region_offset().x - half_width) / scale));
             val = min + static_cast<T>(static_cast<float>(max - min) * progress);
-            hovered = true;
+            focused = true;
         } else {
             progress = static_cast<float>(val - min) / static_cast<float>(max - min);
         }
 
         canvas.push_region("handle"_id);
 
-        hovered |= canvas.region_hovered() | canvas.region_request_focus();
+        focused |= canvas.region_request_focus() || canvas.region_hovered();
 
         canvas.add_primitive(
             "base"_id,
-            canvas_fill_rect{ bounds{ 0.0f, handle_width, 0.0f, height }, hovered ? style.highlight_color : style.normal_color });
+            canvas_fill_rect{ bounds{ 0.0f, handle_width, 0.0f, height }, focused ? style.highlight_color : style.normal_color });
         const auto center = scale * progress + half_width;
         canvas.pop_region(bounds{ center - half_width, center + half_width, 0.0f, height });
 
@@ -447,5 +447,35 @@ namespace animgui {
     ANIMGUI_API void slider(canvas& canvas, const float width, const float handle_width, float& val, const float min,
                             const float max) {
         slider_impl(canvas, width, handle_width, val, min, max);
+    }
+    ANIMGUI_API void switch_(canvas& canvas, bool& state) {
+        auto&& style = canvas.style();
+        const auto width = style.font->standard_width() * 3 + 2.0f * style.padding.x;
+        const auto height = style.font->height() + 2.0f * style.padding.y;
+        const auto box = bounds{ 0.0f, width * 2.0f, 0.0f, height };
+        const auto uid = canvas.push_region(canvas.region_sub_uid(), box).second;
+        const auto pressed = canvas.input_backend().action_press();
+        const auto focused = canvas.region_request_focus() || canvas.region_hovered();
+        if(clicked(canvas, uid, pressed, focused)) {
+            state = !state;
+        }
+
+        canvas.add_primitive("base"_id, canvas_fill_rect{ box, style.background_color });
+        const auto offset = state ? width : 0.0f;
+
+        canvas.add_primitive(
+            "handle"_id,
+            canvas_fill_rect{ { offset, offset + width, 0.0f, height }, focused ? style.highlight_color : style.normal_color });
+
+        primitive text = canvas_text{ { 0.0f, style.padding.y }, state ? "ON" : "OFF", style.font, style.font_color };
+        const auto text_width = canvas.calculate_bounds(text).x;
+        std::get<canvas_text>(text).pos.x = (width - text_width) / 2.0f + offset;
+        canvas.add_primitive("label"_id, std::move(text));
+
+        canvas.add_primitive(
+            "bounds"_id,
+            canvas_stroke_rect{ box, focused ? style.highlight_color : style.normal_color, style.bounds_edge_width });
+
+        canvas.pop_region();
     }
 }  // namespace animgui

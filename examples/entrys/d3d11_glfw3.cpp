@@ -40,7 +40,7 @@ int main() {
     glfwWindowHint(GLFW_DECORATED, GLFW_FALSE);
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
 
-    int w = 800, h = 600;
+    int w = 1024, h = 768;
     GLFWwindow* const window = glfwCreateWindow(w, h, "Animgui demo ( d3d11_glfw3 )", nullptr, nullptr);
     int screen_w, screen_h;
     glfwGetMonitorWorkarea(glfwGetPrimaryMonitor(), nullptr, nullptr, &screen_w, &screen_h);
@@ -134,8 +134,7 @@ int main() {
         };
 
         while(!glfwWindowShouldClose(window)) {
-            glfw3_backend->new_frame();  // clear state
-            glfwPollEvents();
+            glfw3_backend->new_frame();
             draw();
         }
     }
