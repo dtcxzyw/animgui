@@ -15,6 +15,9 @@ namespace animgui {
         uint32_t m_count = 0;
         std::pmr::string m_text;
         bool m_state = false;
+        size_t m_index = 0;
+        int32_t m_int_value = 0;
+        float m_float_value = 0.0f;
 
     public:
         explicit demo(context& context) {
@@ -94,6 +97,14 @@ namespace animgui {
                                             static_cast<float>(clock::now().time_since_epoch().count() % second) /
                                                 static_cast<float>(second),
                                             std::nullopt);
+                                layout.newline();
+                                radio_button(layout, { "easy", "normal", "hard" }, m_index);
+                                layout.newline();
+                                text(layout, std::pmr::string{ "value: " + std::to_string(m_int_value) });
+                                slider(layout, 300.0f, 20.0f, m_int_value, 0, 10);
+                                layout.newline();
+                                text(layout, std::pmr::string{ "value: " + std::to_string(m_float_value) });
+                                slider(layout, 300.0f, 20.0f, m_float_value, 0.0f, 10.0f);
                                 layout.newline();
                                 if(button_label(layout, "game pad")) {
                                     manager.open_window("game_pad"_id);

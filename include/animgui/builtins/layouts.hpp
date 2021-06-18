@@ -97,6 +97,8 @@ namespace animgui {
     ANIMGUI_API void layout_vertical(canvas& parent, float max_height, const std::function<void(canvas&)>& render_function);
     ANIMGUI_API void select(canvas& parent, std::pmr::string title, bool unique,
                             const std::function<void(canvas&)>& render_function);
+    ANIMGUI_API void sortable(canvas& parent, std::pmr::string title,
+                              const std::function<void(row_layout_canvas&)>& render_function);
     ANIMGUI_API void group(canvas& parent, const std::function<void(canvas&)>& render_function);
     ANIMGUI_API void popup(canvas& parent, std::pmr::string title, const std::function<void(canvas&)>& render_function);
     class table_canvas : public layout_proxy {
@@ -108,6 +110,5 @@ namespace animgui {
     ANIMGUI_API void table(canvas& parent, const std::pmr::vector<row_alignment>& columns,
                            const std::function<void(table_canvas&)>& render_function);
     ANIMGUI_API void tree(canvas& parent, const std::function<void(canvas&)>& render_function);
-    // TODO: sortable
 
 }  // namespace animgui

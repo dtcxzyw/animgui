@@ -6,6 +6,7 @@
 #include <animgui/core/common.hpp>
 #include <animgui/core/input_backend.hpp>
 #include <animgui/core/style.hpp>
+#include <cassert>
 #include <utf8.h>
 
 namespace animgui {
@@ -344,7 +345,7 @@ namespace animgui {
     ANIMGUI_API void progressbar(canvas& canvas, const float width, const float progress, std::optional<std::pmr::string> label) {
         auto&& style = canvas.style();
         const bounds box{ 0.0f, width, 0.0f, 2.0f * style.padding.y + style.font->height() };
-        canvas.push_region("bounds"_id, box);
+        canvas.push_region(mix(canvas.region_sub_uid(), "bounds"_id), box);
         canvas.add_primitive("base"_id, canvas_fill_rect{ box, style.highlight_color });
         // TODO: color mapping
         canvas.add_primitive("progress"_id,
@@ -358,5 +359,93 @@ namespace animgui {
         }
 
         canvas.pop_region();
+    }
+    ANIMGUI_API void radio_button(canvas& canvas, const std::pmr::vector<std::pmr::string>& labels, size_t& index) {
+        auto&& style = canvas.style();
+        canvas.push_region(canvas.region_sub_uid());
+        bounds box{ 0.0f, 0.0f, 0.0f, 0.0f };
+        if(index >= labels.size())
+            index = 0;
+
+        for(size_t i = 0; i < labels.size(); ++i) {
+            canvas.push_region(canvas.region_sub_uid());
+            const auto hovered = canvas.region_hovered() || canvas.region_request_focus();
+            const auto pressed = canvas.region_pressed(key_code::left_button) || index == i;
+            auto [idx, uid] = canvas.add_primitive(
+                "button_base"_id,
+                button_base{ { 0.0f, 0.0f }, { 0.0f, 0.0f }, hovered ? button_status::hovered : button_status::normal });
+            if(clicked(canvas, uid, pressed, hovered))
+                index = i;
+            primitive text =
+                canvas_text{ { 0.0f, 0.0f }, labels[i], style.font, index == i ? style.font_color : style.normal_color };
+            const auto content_size = canvas.calculate_bounds(text);
+
+            auto&& inst = std::get<button_base>(std::get<primitive>(canvas.commands()[idx]));
+            inst.content_size = content_size;
+            const auto [w, h] = canvas.calculate_bounds(inst);
+            const auto offset_x = (w - content_size.x) / 2.0f;
+            const auto offset_y = (h - content_size.y) / 2.0f;
+            std::get<canvas_text>(text).pos = { offset_x, offset_y };
+
+            canvas.add_primitive("label"_id, std::move(text));
+
+            canvas.pop_region(bounds{ box.right, box.right + w, 0.0f, h });
+            box.bottom = std::fmax(box.bottom, h);
+            box.right += w;
+        }
+
+        canvas.pop_region(box);
+    }
+
+    template <typename T>
+    static void slider_impl(canvas& canvas, const float width, const float handle_width, T& val, const T min, const T max) {
+        auto&& style = canvas.style();
+        const auto height = style.font->height() + 2.0f * style.padding.y;
+        const auto full_uid = canvas.push_region(canvas.region_sub_uid(), bounds{ 0.0f, width, 0.0f, height }).second;
+
+        const auto base_height = 3 * style.bounds_edge_width;
+
+        canvas.add_primitive(
+            "base"_id,
+            canvas_fill_rect{ bounds{ 0.0f, width, (height - base_height) / 2.0f, (height + base_height) / 2.0f },
+                              style.background_color });
+
+        assert(min <= val && val <= max);
+        auto& progress = canvas.storage<float>(full_uid);
+        bool hovered = false;
+
+        const auto half_width = handle_width / 2.0f;
+        assert(width > handle_width);
+        const auto scale = width - handle_width;
+
+        if(selected(canvas, full_uid)) {
+            progress = std::fmin(
+                1.0f,
+                std::fmax(0.0f, (canvas.input_backend().get_cursor_pos().x - canvas.region_offset().x - half_width) / scale));
+            val = min + static_cast<T>(static_cast<float>(max - min) * progress);
+            hovered = true;
+        } else {
+            progress = static_cast<float>(val - min) / static_cast<float>(max - min);
+        }
+
+        canvas.push_region("handle"_id);
+
+        hovered |= canvas.region_hovered() | canvas.region_request_focus();
+
+        canvas.add_primitive(
+            "base"_id,
+            canvas_fill_rect{ bounds{ 0.0f, handle_width, 0.0f, height }, hovered ? style.highlight_color : style.normal_color });
+        const auto center = scale * progress + half_width;
+        canvas.pop_region(bounds{ center - half_width, center + half_width, 0.0f, height });
+
+        canvas.pop_region();
+    }
+    ANIMGUI_API void slider(canvas& canvas, const float width, const float handle_width, int32_t& val, const int32_t min,
+                            const int32_t max) {
+        slider_impl(canvas, width, handle_width, val, min, max);
+    }
+    ANIMGUI_API void slider(canvas& canvas, const float width, const float handle_width, float& val, const float min,
+                            const float max) {
+        slider_impl(canvas, width, handle_width, val, min, max);
     }
 }  // namespace animgui
