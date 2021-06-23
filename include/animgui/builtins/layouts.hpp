@@ -14,20 +14,20 @@ namespace animgui {
     public:
         explicit layout_proxy(canvas& parent) noexcept : m_parent{ parent }, m_offset{ parent.commands().size() } {}
         [[nodiscard]] vec2 reserved_size() const noexcept final;
-        void* raw_storage(size_t hash, uid uid) final;
-        [[nodiscard]] const bounds& region_bounds() const override;
+        void* raw_storage(size_t hash, identifier uid) final;
+        [[nodiscard]] const bounds_aabb& region_bounds() const override;
         [[nodiscard]] bool region_hovered() const override;
         void register_type(size_t hash, size_t size, size_t alignment, raw_callback ctor, raw_callback dtor) final;
-        void pop_region(const std::optional<bounds>& new_bounds) override;
-        std::pair<size_t, uid> push_region(uid uid, const std::optional<bounds>& reserved_bounds) override;
-        std::pair<size_t, uid> add_primitive(uid uid, primitive primitive) override;
-        float step(uid id, float dest) final;
+        void pop_region(const std::optional<bounds_aabb>& new_bounds) override;
+        std::pair<size_t, identifier> push_region(identifier uid, const std::optional<bounds_aabb>& reserved_bounds) override;
+        std::pair<size_t, identifier> add_primitive(identifier uid, primitive primitive) override;
+        float step(identifier id, float dest) final;
         [[nodiscard]] const animgui::style& style() const noexcept final;
         [[nodiscard]] vec2 calculate_bounds(const primitive& primitive) const final;
         span<operation> commands() noexcept final;
-        [[nodiscard]] bool hovered(const bounds& bounds) const override;
+        [[nodiscard]] bool hovered(const bounds_aabb& bounds) const override;
         [[nodiscard]] std::pmr::memory_resource* memory_resource() const noexcept final;
-        uid region_sub_uid() override;
+        identifier region_sub_uid() override;
         [[nodiscard]] animgui::input_backend& input_backend() const noexcept override;
         bool region_request_focus(bool force) override;
         [[nodiscard]] vec2 region_offset() const final;
@@ -43,7 +43,7 @@ namespace animgui {
 
     ANIMGUI_API vec2 layout_row(canvas& parent, row_alignment alignment,
                                 const std::function<void(row_layout_canvas&)>& render_function);
-    ANIMGUI_API bounds layout_row_center(canvas& parent, const std::function<void(row_layout_canvas&)>& render_function);
+    ANIMGUI_API bounds_aabb layout_row_center(canvas& parent, const std::function<void(row_layout_canvas&)>& render_function);
 
     class window_canvas : public layout_proxy {
     public:
@@ -72,11 +72,11 @@ namespace animgui {
     class multiple_window_canvas : public layout_proxy {
     public:
         explicit multiple_window_canvas(canvas& parent) noexcept : layout_proxy{ parent } {}
-        virtual void new_window(uid id, std::optional<std::pmr::string> title, window_attributes attributes,
+        virtual void new_window(identifier id, std::optional<std::pmr::string> title, window_attributes attributes,
                                 const std::function<void(window_canvas&)>& render_function) = 0;
-        virtual void close_window(uid id) = 0;
-        virtual void open_window(uid id) = 0;
-        virtual void focus_window(uid id) = 0;
+        virtual void close_window(identifier id) = 0;
+        virtual void open_window(identifier id) = 0;
+        virtual void focus_window(identifier id) = 0;
     };
     ANIMGUI_API void multiple_window(canvas& parent, const std::function<void(multiple_window_canvas&)>& render_function);
     ANIMGUI_API void docking(canvas& parent, const std::function<void(multiple_window_canvas&)>& render_function);
@@ -86,8 +86,8 @@ namespace animgui {
     class tab_canvas : public layout_proxy {
     public:
         explicit tab_canvas(canvas& parent) noexcept : layout_proxy{ parent } {}
-        virtual void new_tab(uid id, std::pmr::string title, const std::function<void(canvas&)>& render_function) = 0;
-        virtual void active(uid id) = 0;
+        virtual void new_tab(identifier id, std::pmr::string title, const std::function<void(canvas&)>& render_function) = 0;
+        virtual void active(identifier id) = 0;
     };
     ANIMGUI_API void tab(canvas& parent, const std::function<void(tab_canvas&)>& render_function);
     ANIMGUI_API void modal(canvas& parent, vec2 size, const std::function<void(canvas&)>& render_function);

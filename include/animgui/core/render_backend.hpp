@@ -35,11 +35,11 @@ namespace animgui {
 
     struct texture_region final {
         std::shared_ptr<texture> texture;
-        bounds region;
-        [[nodiscard]] texture_region sub_region(const bounds& bounds) const;
+        bounds_aabb region;
+        [[nodiscard]] texture_region sub_region(const bounds_aabb& bounds) const;
     };
 
-    using native_callback = std::function<void(const bounds&)>;
+    using native_callback = std::function<void(const bounds_aabb&)>;
 
     enum class primitive_type : uint32_t {
         points = 1 << 0,
@@ -63,7 +63,7 @@ namespace animgui {
     struct vertex final {
         vec2 pos;
         vec2 tex_coord;
-        color color;
+        color_rgba color;
     };
 
     // TODO: unique vertices buffer
@@ -75,7 +75,7 @@ namespace animgui {
     };
 
     struct command final {
-        bounds clip;
+        bounds_aabb clip;
         std::variant<native_callback, primitives> desc;
 
         command() = delete;

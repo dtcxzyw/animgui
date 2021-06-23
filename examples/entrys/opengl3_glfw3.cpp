@@ -22,8 +22,8 @@
 }
 
 // refer to https://learnopengl.com/In-Practice/Debugging
-void glDebugOutput(const GLenum source, const GLenum type, const unsigned int id, const GLenum severity, GLsizei,
-                   const char* message, const void*) {
+void gl_debug_output(const GLenum source, const GLenum type, const unsigned int id, const GLenum severity, GLsizei,
+                     const char* message, const void*) {
     // ignore non-significant error/warning codes
     if(id == 131169 || id == 131185 || id == 131218 || id == 131204)
         return;
@@ -31,7 +31,8 @@ void glDebugOutput(const GLenum source, const GLenum type, const unsigned int id
     std::cout << "---------------" << std::endl;
     std::cout << "Debug message (" << id << "): " << message << std::endl;
 
-    switch(source) {
+    // ReSharper disable once CppDefaultCaseNotHandledInSwitchStatement
+    switch(source) {  // NOLINT(hicpp-multiway-paths-covered)
         case GL_DEBUG_SOURCE_API:
             std::cout << "Source: API";
             break;
@@ -53,7 +54,8 @@ void glDebugOutput(const GLenum source, const GLenum type, const unsigned int id
     }
     std::cout << std::endl;
 
-    switch(type) {
+    // ReSharper disable once CppDefaultCaseNotHandledInSwitchStatement
+    switch(type) {  // NOLINT(hicpp-multiway-paths-covered)
         case GL_DEBUG_TYPE_ERROR:
             std::cout << "Type: Error";
             break;
@@ -84,7 +86,8 @@ void glDebugOutput(const GLenum source, const GLenum type, const unsigned int id
     }
     std::cout << std::endl;
 
-    switch(severity) {
+    // ReSharper disable once CppDefaultCaseNotHandledInSwitchStatement
+    switch(severity) {  // NOLINT(hicpp-multiway-paths-covered)
         case GL_DEBUG_SEVERITY_HIGH:
             std::cout << "Severity: high";
             break;
@@ -121,11 +124,11 @@ int main() {
     glfwWindowHint(GLFW_DOUBLEBUFFER, GLFW_TRUE);
     glfwWindowHint(GLFW_SAMPLES, 8);
 
-    const int w = 1024, h = 768;
-    GLFWwindow* const window = glfwCreateWindow(w, h, "Animgui demo ( opengl3_glfw3 )", nullptr, nullptr);
+    const int width = 1024, height = 768;
+    GLFWwindow* const window = glfwCreateWindow(width, height, "Animgui demo ( opengl3_glfw3 )", nullptr, nullptr);
     int screen_w, screen_h;
     glfwGetMonitorWorkarea(glfwGetPrimaryMonitor(), nullptr, nullptr, &screen_w, &screen_h);
-    glfwSetWindowPos(window, (screen_w - w) / 2, (screen_h - h) / 2);
+    glfwSetWindowPos(window, (screen_w - width) / 2, (screen_h - height) / 2);
 
     glfwMakeContextCurrent(window);
 
@@ -137,7 +140,7 @@ int main() {
     if(flags & GL_CONTEXT_FLAG_DEBUG_BIT) {
         glEnable(GL_DEBUG_OUTPUT);
         glEnable(GL_DEBUG_OUTPUT_SYNCHRONOUS);
-        glDebugMessageCallback(glDebugOutput, nullptr);
+        glDebugMessageCallback(gl_debug_output, nullptr);
         glDebugMessageControl(GL_DONT_CARE, GL_DONT_CARE, GL_DONT_CARE, 0, nullptr, GL_TRUE);
     }
 

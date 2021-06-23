@@ -3,6 +3,7 @@
 #include <animgui/builtins/image_compactors.hpp>
 #include <animgui/core/image_compactor.hpp>
 #include <cassert>
+#include <cmath>
 #include <optional>
 
 namespace animgui {
@@ -47,7 +48,7 @@ namespace animgui {
             m_columns.push_back(column);
         }
 
-        [[nodiscard]] bounds update_texture(uvec2 offset, const image_desc& image, const uint32_t margin) const {
+        [[nodiscard]] bounds_aabb update_texture(uvec2 offset, const image_desc& image, const uint32_t margin) const {
             offset.x += margin;
             offset.y += margin;
             m_texture->update_texture(offset, image);
@@ -64,7 +65,7 @@ namespace animgui {
         [[nodiscard]] std::shared_ptr<texture> texture() const {
             return m_texture;
         }
-        std::optional<bounds> allocate(const image_desc& image, const float max_scale) {
+        std::optional<bounds_aabb> allocate(const image_desc& image, const float max_scale) {
             // Create a new node.
             tree_node new_node(m_memory_resource);
             const auto margin = 1U << static_cast<uint32_t>(std::ceil(std::log2(std::fmax(1.0f, max_scale))));
@@ -141,7 +142,7 @@ namespace animgui {
             if(std::max(image.size.x, image.size.y) >= image_pool_size) {
                 auto tex = m_backend.create_texture(image.size, image.channels);
                 tex->update_texture(uvec2{ 0, 0 }, image);
-                return { std::move(tex), bounds{ 0.0f, 1.0f, 0.0f, 1.0f } };
+                return { std::move(tex), bounds_aabb{ 0.0f, 1.0f, 0.0f, 1.0f } };
             }
             auto& images = m_images[static_cast<uint32_t>(image.channels)];
             for(auto&& pool : images) {

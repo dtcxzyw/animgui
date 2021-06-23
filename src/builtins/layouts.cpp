@@ -13,10 +13,10 @@ namespace animgui {
     vec2 layout_proxy::reserved_size() const noexcept {
         return m_parent.reserved_size();
     }
-    const bounds& layout_proxy::region_bounds() const {
+    const bounds_aabb& layout_proxy::region_bounds() const {
         return m_parent.region_bounds();
     }
-    void* layout_proxy::raw_storage(const size_t hash, const uid uid) {
+    void* layout_proxy::raw_storage(const size_t hash, const identifier uid) {
         return m_parent.raw_storage(hash, uid);
     }
     bool layout_proxy::region_hovered() const {
@@ -26,14 +26,14 @@ namespace animgui {
                                      const raw_callback dtor) {
         m_parent.register_type(hash, size, alignment, ctor, dtor);
     }
-    void layout_proxy::pop_region(const std::optional<bounds>& new_bounds) {
+    void layout_proxy::pop_region(const std::optional<bounds_aabb>& new_bounds) {
         m_parent.pop_region(new_bounds);
     }
-    std::pair<size_t, uid> layout_proxy::push_region(const uid uid, const std::optional<bounds>& reserved_bounds) {
+    std::pair<size_t, identifier> layout_proxy::push_region(const identifier uid, const std::optional<bounds_aabb>& reserved_bounds) {
         const auto [idx, id] = m_parent.push_region(uid, reserved_bounds);
         return { idx - m_offset, id };
     }
-    std::pair<size_t, uid> layout_proxy::add_primitive(const uid uid, primitive primitive) {
+    std::pair<size_t, identifier> layout_proxy::add_primitive(const identifier uid, primitive primitive) {
         const auto [idx, id] = m_parent.add_primitive(uid, std::move(primitive));
         return { idx - m_offset, id };
     }
@@ -44,7 +44,7 @@ namespace animgui {
     const style& layout_proxy::style() const noexcept {
         return m_parent.style();
     }
-    bool layout_proxy::hovered(const bounds& bounds) const {
+    bool layout_proxy::hovered(const bounds_aabb& bounds) const {
         return m_parent.hovered(bounds);
     }
     vec2 layout_proxy::calculate_bounds(const primitive& primitive) const {
@@ -53,10 +53,10 @@ namespace animgui {
     span<operation> layout_proxy::commands() noexcept {
         return m_parent.commands().subspan(m_offset);
     }
-    float layout_proxy::step(const uid id, const float dest) {
+    float layout_proxy::step(const identifier id, const float dest) {
         return m_parent.step(id, dest);
     }
-    uid layout_proxy::region_sub_uid() {
+    identifier layout_proxy::region_sub_uid() {
         return m_parent.region_sub_uid();
     }
     input_backend& layout_proxy::input_backend() const noexcept {
@@ -73,7 +73,7 @@ namespace animgui {
         float m_vertical_offset = 0.0f;
         float m_max_total_width = 0.0f;
 
-        std::pmr::vector<std::tuple<uid, size_t, vec2>> m_current_line;
+        std::pmr::vector<std::tuple<identifier, size_t, vec2>> m_current_line;
         void flush() {
             if(m_current_depth != 0)
                 throw std::logic_error("mismatched region");
@@ -112,9 +112,9 @@ namespace animgui {
 
                 const auto span = commands();
                 for(auto&& [id, idx, size] : m_current_line) {
-                    const auto new_bounds = bounds{ offset, offset + size.x, m_vertical_offset, m_vertical_offset + size.y };
+                    const auto new_bounds = bounds_aabb{ offset, offset + size.x, m_vertical_offset, m_vertical_offset + size.y };
                     std::get<animgui::push_region>(span[idx]).bounds = new_bounds;
-                    storage<bounds>(mix(id, "last_bounds"_id)) = new_bounds;
+                    storage<bounds_aabb>(mix(id, "last_bounds"_id)) = new_bounds;
                     offset += size.x + spacing;
                 }
             }
@@ -126,17 +126,17 @@ namespace animgui {
     public:
         row_layout_canvas_impl(canvas& parent, const row_alignment alignment)
             : row_layout_canvas{ parent }, m_alignment{ alignment }, m_current_line{ parent.memory_resource() } {}
-        std::pair<size_t, uid> push_region(const uid uid, const std::optional<bounds>& reserved_bounds) override {
+        std::pair<size_t, identifier> push_region(const identifier uid, const std::optional<bounds_aabb>& reserved_bounds) override {
             const auto [idx, id] = layout_proxy::push_region(uid, reserved_bounds);
             if(++m_current_depth == 1) {
                 m_current_line.emplace_back(id, idx, vec2{});
             }
             return { idx, id };
         }
-        void pop_region(const std::optional<bounds>& new_bounds) override {
+        void pop_region(const std::optional<bounds_aabb>& new_bounds) override {
             m_parent.pop_region(new_bounds);
             if(--m_current_depth == 0) {
-                const auto [x1, x2, y1, y2] = storage<bounds>(mix(std::get<uid>(m_current_line.back()), "last_bounds"_id));
+                const auto [x1, x2, y1, y2] = storage<bounds_aabb>(mix(std::get<identifier>(m_current_line.back()), "last_bounds"_id));
                 std::get<vec2>(m_current_line.back()) = { x2 - x1, y2 - y1 };
             }
         }
@@ -156,18 +156,18 @@ namespace animgui {
         return canvas.finish();
     }
 
-    ANIMGUI_API bounds layout_row_center(canvas& parent, const std::function<void(row_layout_canvas&)>& render_function) {
+    ANIMGUI_API bounds_aabb layout_row_center(canvas& parent, const std::function<void(row_layout_canvas&)>& render_function) {
         parent.push_region("layout_center_region"_id);
         const auto [w, h] = layout_row(parent, row_alignment::middle, render_function);
         const auto offset_y = (parent.reserved_size().y - h) / 2.0f;
-        const auto bounds = animgui::bounds{ 0.0f, parent.reserved_size().x, offset_y, offset_y + h };
+        const auto bounds = animgui::bounds_aabb{ 0.0f, parent.reserved_size().x, offset_y, offset_y + h };
         parent.pop_region(bounds);
         return bounds;
     }
 
     // TODO: scroll
     ANIMGUI_API void panel(canvas& parent, const vec2 size, const std::function<void(canvas&)>& render_function) {
-        const bounds bounds{ 0.0f, size.x, 0.0f, size.y };
+        const bounds_aabb bounds{ 0.0f, size.x, 0.0f, size.y };
         parent.push_region(parent.region_sub_uid(), bounds);
         parent.add_primitive(
             parent.region_sub_uid(),
@@ -198,9 +198,9 @@ namespace animgui {
         vec2 m_size;
 
     public:
-        window_canvas_impl(canvas& parent, const bounds& bounds, std::optional<std::pmr::string> title,
+        window_canvas_impl(canvas& parent, const bounds_aabb& bounds, std::optional<std::pmr::string> title,
                            const window_attributes attributes, window_operator& operator_,
-                           animgui::bounds* absolute_bounds = nullptr)
+                           animgui::bounds_aabb* absolute_bounds = nullptr)
             : window_canvas{ parent }, m_attributes{ attributes }, m_operator{ operator_ }, m_size{ bounds.size() } {
             const auto full_id = layout_proxy::push_region("window"_id, bounds).second;
             if(absolute_bounds)
@@ -217,7 +217,7 @@ namespace animgui {
             const auto height = style().font->height() * 1.1f;
 
             if(!has_attribute(m_attributes, window_attributes::no_title_bar)) {
-                const animgui::bounds bar{ 0.0f, m_size.x, 0.0f, height };
+                const animgui::bounds_aabb bar{ 0.0f, m_size.x, 0.0f, height };
                 // ReSharper disable once CppTooWideScope
                 const auto bar_uid = layout_proxy::push_region("title_bar"_id, bar).second;
 
@@ -246,7 +246,7 @@ namespace animgui {
                 layout_proxy::pop_region(std::nullopt);
                 const auto padding = style().padding;
                 layout_proxy::push_region(
-                    "content"_id, animgui::bounds{ padding.x, m_size.x - padding.x, height + padding.y, m_size.y - padding.y });
+                    "content"_id, animgui::bounds_aabb{ padding.x, m_size.x - padding.x, height + padding.y, m_size.y - padding.y });
             }
         }
         void close() override {
@@ -309,10 +309,10 @@ namespace animgui {
 
     class multiple_window_operator final : public window_operator {
         multiple_window_canvas_impl& m_canvas;
-        uid m_id;
+        identifier m_id;
 
     public:
-        explicit multiple_window_operator(multiple_window_canvas_impl& canvas, const uid id) : m_canvas{ canvas }, m_id{ id } {}
+        explicit multiple_window_operator(multiple_window_canvas_impl& canvas, const identifier id) : m_canvas{ canvas }, m_id{ id } {}
         void close() override;
         void minimize() override {}
         void maximize() override {}
@@ -321,30 +321,30 @@ namespace animgui {
     };
 
     struct windows_info final {
-        uid id;
-        bounds bounds;
-        animgui::bounds absolute_bounds;
+        identifier id;
+        bounds_aabb bounds;
+        animgui::bounds_aabb absolute_bounds;
         bool is_open;
         bool auto_adjust;
         windows_info() = delete;
     };
 
     class multiple_window_canvas_impl final : public multiple_window_canvas {
-        std::pmr::unordered_map<uid, std::pair<size_t, size_t>, uid_hasher> m_ranges;
-        std::pmr::vector<uid> m_focus_requests;
-        std::pmr::vector<uid> m_open_requests;
-        std::pmr::vector<uid> m_close_requests;
-        std::pmr::vector<std::pair<uid, vec2>> m_move_requests;
+        std::pmr::unordered_map<identifier, std::pair<size_t, size_t>, identifier_hasher> m_ranges;
+        std::pmr::vector<identifier> m_focus_requests;
+        std::pmr::vector<identifier> m_open_requests;
+        std::pmr::vector<identifier> m_close_requests;
+        std::pmr::vector<std::pair<identifier, vec2>> m_move_requests;
         std::pmr::vector<windows_info>& m_info;
-        uid m_current;
+        identifier m_current;
 
-        [[nodiscard]] bounds default_bounds() const {
+        [[nodiscard]] bounds_aabb default_bounds() const {
             const auto size = reserved_size();
             const auto cnt = static_cast<float>(m_info.size());
             return { cnt * style().font->height(), size.x, cnt * style().font->height(), size.y };
         }
 
-        [[nodiscard]] windows_info& locate_window(const uid id) const {
+        [[nodiscard]] windows_info& locate_window(const identifier id) const {
             for(auto&& win : m_info)
                 if(win.id == id)
                     return win;
@@ -352,7 +352,7 @@ namespace animgui {
             return m_info.front();
         }
 
-        static void clamp_bounds(bounds& bounds, const vec2 size) {
+        static void clamp_bounds(bounds_aabb& bounds, const vec2 size) {
             if(bounds.right - bounds.left < size.x) {
                 if(bounds.left < 0.0f) {
                     bounds.right -= bounds.left;
@@ -379,7 +379,7 @@ namespace animgui {
               m_focus_requests{ parent.memory_resource() }, m_open_requests{ parent.memory_resource() },
               m_close_requests{ parent.memory_resource() }, m_move_requests{ parent.memory_resource() },
               m_info{ parent.storage<std::decay_t<decltype(m_info)>>(parent.region_sub_uid()) }, m_current{ 0 } {}
-        void new_window(const uid id, std::optional<std::pmr::string> title, const window_attributes attributes,
+        void new_window(const identifier id, std::optional<std::pmr::string> title, const window_attributes attributes,
                         const std::function<void(window_canvas&)>& render_function) override {
             if(auto& [_, bounds, absolute_bounds, is_open, auto_adjust] = locate_window(id); is_open) {
                 multiple_window_operator operator_{ *this, id };
@@ -387,7 +387,7 @@ namespace animgui {
 
                 const auto size = reserved_size();
                 m_current = id;
-                push_region(id, animgui::bounds{ 0.0f, size.x, 0.0f, size.y });
+                push_region(id, animgui::bounds_aabb{ 0.0f, size.x, 0.0f, size.y });
                 clamp_bounds(bounds, size);
                 window_canvas_impl canvas{ *this, bounds, std::move(title), attributes, operator_, &absolute_bounds };
                 render_function(canvas);
@@ -399,7 +399,7 @@ namespace animgui {
                 // TODO: formalize interface
                 if(auto_adjust) {
                     std::pmr::vector<vec2> offset{ { { 0.0f, 0.0f } }, memory_resource() };
-                    animgui::bounds content_bounds{ 0.0f, 0.0f, 0.0f, 0.0f }, sub_bounds{ 0.0f, 0.0f, 0.0f, 0.0f };
+                    animgui::bounds_aabb content_bounds{ 0.0f, 0.0f, 0.0f, 0.0f }, sub_bounds{ 0.0f, 0.0f, 0.0f, 0.0f };
                     bool valid = false;
                     for(size_t idx = beg; idx < end; ++idx) {
                         // ReSharper disable once CppDefaultCaseNotHandledInSwitchStatement
@@ -461,17 +461,17 @@ namespace animgui {
 
             return layout_proxy::region_request_focus(false);
         }
-        void close_window(const uid id) override {
+        void close_window(const identifier id) override {
             m_close_requests.push_back(id);
         }
-        void move_window(const uid id, const vec2 delta) {
+        void move_window(const identifier id, const vec2 delta) {
             m_move_requests.push_back({ id, delta });
         }
-        void open_window(const uid id) override {
+        void open_window(const identifier id) override {
             m_open_requests.push_back(id);
             m_focus_requests.push_back(id);
         }
-        void focus_window(const uid id) override {
+        void focus_window(const identifier id) override {
             m_focus_requests.push_back(id);
         }
         void finish() {

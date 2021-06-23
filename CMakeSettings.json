@@ -9,7 +9,29 @@
       "installRoot": "${projectDir}\\out\\install\\${name}",
       "cmakeCommandArgs": "",
       "buildCommandArgs": "",
-      "ctestCommandArgs": ""
+      "ctestCommandArgs": "",
+      "variables": [
+        {
+          "name": "BACKEND_STB_FONT",
+          "value": "True",
+          "type": "BOOL"
+        },
+        {
+          "name": "BACKEND_GLFW3",
+          "value": "True",
+          "type": "BOOL"
+        },
+        {
+          "name": "BACKEND_OPENGL3",
+          "value": "True",
+          "type": "BOOL"
+        },
+        {
+          "name": "BACKEND_D3D11",
+          "value": "True",
+          "type": "BOOL"
+        }
+      ]
     },
     {
       "name": "x64-Release",
@@ -20,7 +42,29 @@
       "cmakeCommandArgs": "",
       "buildCommandArgs": "",
       "ctestCommandArgs": "",
-      "inheritEnvironments": [ "msvc_x64_x64" ]
+      "inheritEnvironments": [ "msvc_x64_x64" ],
+      "variables": [
+        {
+          "name": "BACKEND_STB_FONT",
+          "value": "True",
+          "type": "BOOL"
+        },
+        {
+          "name": "BACKEND_GLFW3",
+          "value": "True",
+          "type": "BOOL"
+        },
+        {
+          "name": "BACKEND_OPENGL3",
+          "value": "True",
+          "type": "BOOL"
+        },
+        {
+          "name": "BACKEND_D3D11",
+          "value": "True",
+          "type": "BOOL"
+        }
+      ]
     }
   ]
 }

@@ -10,13 +10,13 @@ namespace animgui {
     struct style {
         std::shared_ptr<font> font;
 
-        color panel_background_color;
-        color background_color;
-        color normal_color;
-        color highlight_color;
-        color disabled_color;
-        color font_color;
-        color selected_color;
+        color_rgba panel_background_color;
+        color_rgba background_color;
+        color_rgba normal_color;
+        color_rgba highlight_color;
+        color_rgba disabled_color;
+        color_rgba font_color;
+        color_rgba selected_color;
 
         vec2 padding;
         vec2 spacing;

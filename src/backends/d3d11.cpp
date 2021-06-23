@@ -5,6 +5,8 @@
 #include <string_view>
 #define NOMINMAX
 #include <cassert>
+#include <cmath>
+#include <cstring>
 #include <d3d11.h>
 #include <d3dcompiler.h>
 #include <utility>
@@ -13,11 +15,7 @@ using namespace std::literals;
 
 namespace animgui {
     static DXGI_FORMAT get_format(const channel channel) noexcept {
-        if(channel == channel::alpha)
-            return DXGI_FORMAT_R8_UNORM;
-        if(channel == channel::rgb)
-            return DXGI_FORMAT_R8G8B8A8_UNORM;
-        return DXGI_FORMAT_R8G8B8A8_UNORM;
+        return channel == channel::alpha ? DXGI_FORMAT_R8_UNORM : DXGI_FORMAT_R8G8B8A8_UNORM;
     }
     class texture_impl final : public texture {
         ID3D11Texture2D* m_texture;
@@ -233,7 +231,7 @@ namespace animgui {
             m_device_context->Unmap(m_vertex_buffer, 0);
         }
 
-        static void emit(const native_callback& callback, const bounds& clip, uvec2) {
+        static void emit(const native_callback& callback, const bounds_aabb& clip, uvec2) {
             callback(clip);
         }
         static D3D11_PRIMITIVE_TOPOLOGY get_primitive_type(const primitive_type type) noexcept {
@@ -248,7 +246,7 @@ namespace animgui {
             return static_cast<D3D11_PRIMITIVE_TOPOLOGY>(0);
         }
 
-        void emit(const primitives& primitives, const bounds& clip, const uvec2 screen_size) {
+        void emit(const primitives& primitives, const bounds_aabb& clip, const uvec2 screen_size) {
             auto&& [type, vertices, texture, point_line_size] = primitives;
 
             m_device_context->RSSetState(m_rasterizer_state);
@@ -286,8 +284,8 @@ namespace animgui {
                 m_device_context->Unmap(m_constant_buffer, 0);
             }
             m_device_context->IASetPrimitiveTopology(get_primitive_type(type));
+            m_device_context->PSSetSamplers(0, 1, &m_sampler_state);
             if(texture) {
-                m_device_context->PSSetSamplers(0, 1, &m_sampler_state);
                 texture->generate_mipmap();
                 const auto texture_srv = reinterpret_cast<ID3D11ShaderResourceView*>(texture->native_handle());
                 m_device_context->PSSetShaderResources(0, 1, &texture_srv);

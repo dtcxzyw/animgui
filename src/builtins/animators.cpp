@@ -2,6 +2,7 @@
 
 #include <animgui/builtins/animators.hpp>
 #include <animgui/core/animator.hpp>
+#include <cmath>
 
 namespace animgui {
     class dummy_animator final : public animator {
@@ -14,7 +15,7 @@ namespace animgui {
         }
     };
 
-    std::shared_ptr<animator> create_dummy_animator() {
+    ANIMGUI_API std::shared_ptr<animator> create_dummy_animator() {
         return std::make_shared<dummy_animator>();
     }
 
@@ -30,10 +31,10 @@ namespace animgui {
         [[nodiscard]] step_function step(float delta_t) const override {
             return [dx = delta_t * m_speed](const float dest, void* data) {
                 auto&& state = static_cast<storage*>(data);
-                if(fabsf(state->current - dest) < dx)
+                if(std::fabs(state->current - dest) < dx)
                     state->current = dest;
                 else
-                    state->current += copysignf(dx, dest - state->current);
+                    state->current += std::copysign(dx, dest - state->current);
                 return state->current;
             };
         }
@@ -42,7 +43,7 @@ namespace animgui {
         }
     };
 
-    std::shared_ptr<animator> create_linear_animator(float speed) {
+    ANIMGUI_API std::shared_ptr<animator> create_linear_animator(float speed) {
         return std::make_shared<linear_animator>(speed);
     }
 
@@ -56,7 +57,7 @@ namespace animgui {
     public:
         explicit physical_animator(const float speed) : m_speed{ speed } {}
         [[nodiscard]] step_function step(float delta_t) const override {
-            return [factor = std::expf(-m_speed * delta_t)](const float dest, void* data) {
+            return [factor = std::exp(-m_speed * delta_t)](const float dest, void* data) {
                 auto&& state = static_cast<storage*>(data);
                 state->current = dest + (state->current - dest) * factor;
                 return state->current;
@@ -67,7 +68,7 @@ namespace animgui {
         }
     };
 
-    std::shared_ptr<animator> create_physical_animator(const float speed) {
+    ANIMGUI_API std::shared_ptr<animator> create_physical_animator(const float speed) {
         return std::make_shared<physical_animator>(speed);
     }
 }  // namespace animgui

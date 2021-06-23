@@ -9,6 +9,7 @@
 #include <animgui/core/image_compactor.hpp>
 #include <animgui/core/input_backend.hpp>
 #include <animgui/core/style.hpp>
+#include <cstring>
 #include <list>
 #include <optional>
 #include <random>
@@ -17,7 +18,7 @@
 
 namespace animgui {
     class state_manager final {
-        std::pmr::unordered_map<uid, std::pair<size_t, size_t>, uid_hasher> m_state_location;
+        std::pmr::unordered_map<identifier, std::pair<size_t, size_t>, identifier_hasher> m_state_location;
         class state_buffer final {
             size_t m_state_size, m_alignment;
             raw_callback m_ctor, m_dtor;
@@ -87,7 +88,7 @@ namespace animgui {
             m_state_location.clear();
             m_state_storage.clear();
         }
-        void* storage(const size_t hash, const uid uid) {
+        void* storage(const size_t hash, const identifier uid) {
             const auto iter = m_state_location.find(uid);
             if(iter == m_state_location.cend()) {
                 auto&& buffer = m_state_storage.find(hash)->second;
@@ -108,9 +109,9 @@ namespace animgui {
     };
     struct region_info final {
         size_t push_command_idx;
-        uid uid;
+        identifier uid;
         std::minstd_rand random_engine;
-        bounds absolute_bounds;
+        bounds_aabb absolute_bounds;
         vec2 offset;
 
         region_info() = delete;
@@ -128,7 +129,7 @@ namespace animgui {
         std::pmr::vector<operation> m_commands;
         std::pmr::deque<region_info> m_region_stack;
         size_t m_animation_state_hash;
-        std::pmr::vector<std::pair<uid, vec2>> m_focusable_region;
+        std::pmr::vector<std::pair<identifier, vec2>> m_focusable_region;
 
     public:
         canvas_impl(context& context, const vec2 size, animgui::input_backend& input_backend, animator& animator,
@@ -143,15 +144,15 @@ namespace animgui {
             m_state_manager.register_type(
                 hash, state_size, alignment, [](void*, size_t) {}, [](void*, size_t) {});
             m_region_stack.push_back({ std::numeric_limits<size_t>::max(),
-                                       uid{ 0 },
+                                       identifier{ 0 },
                                        std::minstd_rand{},  // NOLINT(cert-msc51-cpp)
-                                       bounds{ 0.0f, size.x, 0.0f, size.y },
+                                       bounds_aabb{ 0.0f, size.x, 0.0f, size.y },
                                        { 0.0f, 0.0f } });
         }
         [[nodiscard]] const animgui::style& style() const noexcept override {
             return m_context.style();
         }
-        [[nodiscard]] void* raw_storage(const size_t hash, const uid uid) override {
+        [[nodiscard]] void* raw_storage(const size_t hash, const identifier uid) override {
             return m_state_manager.storage(hash, uid);
         }
         span<operation> commands() noexcept override {
@@ -172,7 +173,7 @@ namespace animgui {
                            const raw_callback dtor) override {
             m_state_manager.register_type(hash, size, alignment, ctor, dtor);
         }
-        void pop_region(const std::optional<bounds>& bounds) override {
+        void pop_region(const std::optional<bounds_aabb>& bounds) override {
             m_commands.push_back(animgui::pop_region{});
             const auto& info = m_region_stack.back();
             const auto idx = info.push_command_idx;
@@ -181,16 +182,16 @@ namespace animgui {
             auto&& current_bounds = std::get<animgui::push_region>(m_commands[idx]).bounds;
             if(bounds.has_value())
                 current_bounds = bounds.value();
-            storage<animgui::bounds>(mix(uid, "last_bounds"_id)) = current_bounds;
+            storage<animgui::bounds_aabb>(mix(uid, "last_bounds"_id)) = current_bounds;
         }
-        [[nodiscard]] uid current_region_uid() const {
+        [[nodiscard]] identifier current_region_uid() const {
             return m_region_stack.back().uid;
         }
-        std::pair<size_t, uid> push_region(const uid uid, const std::optional<bounds>& bounds) override {
+        std::pair<size_t, identifier> push_region(const identifier uid, const std::optional<bounds_aabb>& bounds) override {
             const auto idx = m_commands.size();
-            m_commands.push_back(animgui::push_region{ bounds.value_or(animgui::bounds{ 0.0f, 0.0f, 0.0f, 0.0f }) });
+            m_commands.push_back(animgui::push_region{ bounds.value_or(animgui::bounds_aabb{ 0.0f, 0.0f, 0.0f, 0.0f }) });
             const auto mixed = mix(current_region_uid(), uid);
-            auto last_bounds = storage<animgui::bounds>(mix(mixed, "last_bounds"_id));
+            auto last_bounds = storage<animgui::bounds_aabb>(mix(mixed, "last_bounds"_id));
             const auto& parent = m_region_stack.back();
             const vec2 offset{ last_bounds.left, last_bounds.top };
             clip_bounds(last_bounds, parent.offset, parent.absolute_bounds);
@@ -198,18 +199,18 @@ namespace animgui {
                 { idx, mixed, std::minstd_rand{ static_cast<unsigned>(mixed.id) }, last_bounds, parent.offset + offset });
             return { idx, mixed };
         }
-        [[nodiscard]] const bounds& region_bounds() const override {
+        [[nodiscard]] const bounds_aabb& region_bounds() const override {
             return m_region_stack.back().absolute_bounds;
         }
         [[nodiscard]] bool region_hovered() const override {
             return hovered(region_bounds());
         }
-        [[nodiscard]] bool hovered(const bounds& bounds) const override {
+        [[nodiscard]] bool hovered(const bounds_aabb& bounds) const override {
             // TODO: window pos to canvas pos
             const auto [x, y] = m_input_backend.get_cursor_pos();
             return bounds.left <= x && x < bounds.right && bounds.top <= y && y < bounds.bottom;
         }
-        std::pair<size_t, uid> add_primitive(const uid uid, primitive primitive) override {
+        std::pair<size_t, identifier> add_primitive(const identifier uid, primitive primitive) override {
             const auto idx = m_commands.size();
             m_commands.push_back(std::move(primitive));
             return { idx, mix(current_region_uid(), uid) };
@@ -217,14 +218,14 @@ namespace animgui {
         [[nodiscard]] std::pmr::memory_resource* memory_resource() const noexcept override {
             return m_memory_resource;
         }
-        [[nodiscard]] float step(const uid id, const float dest) override {
+        [[nodiscard]] float step(const identifier id, const float dest) override {
             return m_step_function(dest, m_animation_state_hash ? raw_storage(m_animation_state_hash, id) : nullptr);
         }
         [[nodiscard]] vec2 calculate_bounds(const primitive& primitive) const override {
             return m_emitter.calculate_bounds(primitive, m_context.style());
         }
-        uid region_sub_uid() override {
-            return mix(current_region_uid(), uid{ m_region_stack.back().random_engine() });
+        identifier region_sub_uid() override {
+            return mix(current_region_uid(), identifier{ m_region_stack.back().random_engine() });
         }
         [[nodiscard]] animgui::input_backend& input_backend() const noexcept override {
             return m_input_backend;
@@ -236,7 +237,7 @@ namespace animgui {
             const vec2 center = { (bounds.left + bounds.right) / 2.0f, (bounds.top + bounds.bottom) / 2.0f };
             const auto current = current_region_uid();
             m_focusable_region.push_back({ current, center });
-            uid& last_focus = storage<uid>("glabal_focus"_id);
+            auto& last_focus = storage<identifier>("glabal_focus"_id);
             if(force) {
                 last_focus = current;
                 return true;
@@ -245,9 +246,9 @@ namespace animgui {
         }
         void finish() {
             // TODO: mode switching
-            uid& last_focus = storage<uid>("glabal_focus"_id);
+            auto& last_focus = storage<identifier>("glabal_focus"_id);
             if(m_input_mode != input_mode::game_pad || m_focusable_region.empty()) {
-                last_focus = uid{ 0 };
+                last_focus = identifier{ 0 };
                 return;
             }
             vec2 focus{ 0.0f, 0.0f };
@@ -549,7 +550,7 @@ namespace animgui {
         return std::make_unique<context_impl>(input_backend, render_backend, font_backend, emitter, animator, command_optimizer,
                                               image_compactor, memory_manager);
     }
-    texture_region texture_region::sub_region(const bounds& bounds) const {
+    texture_region texture_region::sub_region(const bounds_aabb& bounds) const {
         const auto w = region.right - region.left, h = region.bottom - region.top;
         return { texture,
                  { region.left + w * bounds.left, region.left + w * bounds.right, region.top + h * bounds.top,

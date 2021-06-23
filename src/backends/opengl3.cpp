@@ -4,6 +4,7 @@
 #include <animgui/backends/opengl3.hpp>
 #include <animgui/core/render_backend.hpp>
 #include <array>
+#include <cmath>
 
 using namespace std::literals;
 
@@ -169,11 +170,11 @@ namespace animgui {
             return 0;
         }
 
-        static void emit(const native_callback& callback, const bounds& clip, vec2) {
+        static void emit(const native_callback& callback, const bounds_aabb& clip, vec2) {
             callback(clip);
         }
 
-        void emit(const primitives& primitives, const bounds&, const vec2 size) {
+        void emit(const primitives& primitives, const bounds_aabb&, const vec2 size) {
             auto&& [type, vertices, texture, point_line_size] = primitives;
             glEnable(GL_BLEND);
             glDisable(GL_DEPTH_TEST);

@@ -19,38 +19,38 @@ namespace animgui {
 
     // TODO: affine transform
     struct canvas_stroke_rect final {
-        bounds bounds;
-        color color;
+        bounds_aabb bounds;
+        color_rgba color;
         float size;
     };
     struct canvas_fill_rect final {
-        bounds bounds;
-        color color;
+        bounds_aabb bounds;
+        color_rgba color;
     };
     struct canvas_line final {
         vec2 start, end;
-        color color;
+        color_rgba color;
         float size;
     };
     struct canvas_point final {
         vec2 pos;
-        color color;
+        color_rgba color;
         float size;
     };
     struct canvas_image final {
-        bounds bounds;
+        bounds_aabb bounds;
         texture_region tex;
-        color factor;
+        color_rgba factor;
     };
     struct canvas_text final {
         vec2 pos;
         std::pmr::string str;
         std::shared_ptr<font> font;
-        color color;
+        color_rgba color;
     };
 
     struct extended_callback final {
-        std::function<void(const bounds&, vec2, std::pmr::vector<command>&, const style&,
+        std::function<void(const bounds_aabb&, vec2, std::pmr::vector<command>&, const style&,
                            const std::function<texture_region(font&, glyph)>&)>
             emitter;
         vec2 bounds;
@@ -60,7 +60,7 @@ namespace animgui {
                                    canvas_text, extended_callback>;
 
     struct push_region final {
-        bounds bounds;
+        bounds_aabb bounds;
     };
     struct pop_region final {};
     using operation = std::variant<push_region, pop_region, primitive>;

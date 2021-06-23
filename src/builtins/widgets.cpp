@@ -13,11 +13,11 @@ namespace animgui {
     ANIMGUI_API void text(canvas& canvas, std::pmr::string str) {
         primitive text = canvas_text{ vec2{ 0.0f, 0.0f }, std::move(str), canvas.style().font, canvas.style().font_color };
         const auto [w, h] = canvas.calculate_bounds(text);
-        canvas.push_region(canvas.region_sub_uid(), bounds{ 0.0f, w, 0.0f, h });
+        canvas.push_region(canvas.region_sub_uid(), bounds_aabb{ 0.0f, w, 0.0f, h });
         canvas.add_primitive("content"_id, std::move(text));
         canvas.pop_region();
     }
-    ANIMGUI_API bool clicked(canvas& canvas, const uid id, const bool pressed, const bool focused) {
+    ANIMGUI_API bool clicked(canvas& canvas, const identifier id, const bool pressed, const bool focused) {
         auto& last_pressed = canvas.storage<bool>(id);
         const auto res = last_pressed && !pressed && focused;
         last_pressed = pressed;
@@ -40,25 +40,25 @@ namespace animgui {
         const auto [w, h] = canvas.calculate_bounds(inst);
         const auto padding_x = (w - content_size.x) / 2.0f;
         const auto padding_y = (h - content_size.y) / 2.0f;
-        canvas.pop_region(bounds{ padding_x, padding_x + content_size.x, padding_y, padding_y + content_size.y });
-        canvas.pop_region(bounds{ 0.0f, w, 0.0f, h });
+        canvas.pop_region(bounds_aabb{ padding_x, padding_x + content_size.x, padding_y, padding_y + content_size.y });
+        canvas.pop_region(bounds_aabb{ 0.0f, w, 0.0f, h });
         return res;
     }
     ANIMGUI_API bool button_label(canvas& canvas, std::pmr::string label) {
         return button_with_content(canvas, [&](animgui::canvas& sub_canvas) { text(sub_canvas, std::move(label)); });
     }
-    ANIMGUI_API void image(canvas& canvas, texture_region image, const vec2 size, const color& factor) {
+    ANIMGUI_API void image(canvas& canvas, texture_region image, const vec2 size, const color_rgba& factor) {
         primitive text = canvas_image{ { 0.0f, size.x, 0.0f, size.y }, std::move(image), factor };
         const auto [w, h] = canvas.calculate_bounds(text);
-        canvas.push_region(canvas.region_sub_uid(), bounds{ 0.0f, w, 0.0f, h });
+        canvas.push_region(canvas.region_sub_uid(), bounds_aabb{ 0.0f, w, 0.0f, h });
         canvas.add_primitive("content"_id, std::move(text));
         canvas.pop_region();
     }
-    ANIMGUI_API bool button_image(canvas& canvas, texture_region image, vec2 size, const color& factor) {
+    ANIMGUI_API bool button_image(canvas& canvas, texture_region image, vec2 size, const color_rgba& factor) {
         return button_with_content(
             canvas, [&](animgui::canvas& sub_canvas) { animgui::image(sub_canvas, std::move(image), size, factor); });
     }
-    ANIMGUI_API bool selected(canvas& canvas, const uid id) {
+    ANIMGUI_API bool selected(canvas& canvas, const identifier id) {
         auto& [state, pressed] = canvas.storage<std::pair<bool, bool>>(mix(id, "selected"_id));
         if(canvas.region_hovered() && !pressed && canvas.input_backend().action_press()) {
             state = true;
@@ -72,7 +72,7 @@ namespace animgui {
         auto&& style = canvas.style();
         const auto height = style.font->height() + 2.0f * style.padding.y;
         const auto width = style.font->standard_width() * glyph_width + 2.0f * style.padding.x;
-        const bounds full_bounds{ 0.0f, width, 0.0f, height };
+        const bounds_aabb full_bounds{ 0.0f, width, 0.0f, height };
 
         const auto uid = canvas.push_region(canvas.region_sub_uid(), full_bounds).second;
 
@@ -283,7 +283,7 @@ namespace animgui {
                 if(static_cast<uint64_t>(clock::now().time_since_epoch().count()) % one_second > one_second / 2) {
                     if(override_mode && std::fabs(start_pos - end_pos) > 0.01f) {
                         canvas.add_primitive("cursor"_id,
-                                             canvas_fill_rect{ bounds{ start_pos, end_pos, style.padding.y,
+                                             canvas_fill_rect{ bounds_aabb{ start_pos, end_pos, style.padding.y,
                                                                        style.padding.y + style.font->height() },
                                                                style.highlight_color });
                     } else
@@ -296,14 +296,14 @@ namespace animgui {
             } else {
                 canvas.add_primitive(
                     "selected_background"_id,
-                    canvas_fill_rect{ bounds{ start_pos, end_pos, style.padding.y, style.padding.y + style.font->height() },
+                    canvas_fill_rect{ bounds_aabb{ start_pos, end_pos, style.padding.y, style.padding.y + style.font->height() },
                                       style.selected_color });
             }
         }
 
         canvas.push_region(
             "text_region"_id,
-            bounds{ style.padding.x, width - style.padding.x, style.padding.y, style.padding.y + style.font->height() });
+            bounds_aabb{ style.padding.x, width - style.padding.x, style.padding.y, style.padding.y + style.font->height() });
         auto text = !edit && str.empty() ? std::move(placeholder).value_or("") : str;
         canvas.add_primitive(
             "content"_id,
@@ -322,7 +322,7 @@ namespace animgui {
         auto&& style = canvas.style();
         const auto size = style.font->height();
 
-        const bounds box = { style.padding.x, style.padding.x + size, style.padding.y, style.padding.y + size };
+        const bounds_aabb box = { style.padding.x, style.padding.x + size, style.padding.y, style.padding.y + size };
         canvas.push_region("box"_id, box);
         canvas.add_primitive("bounds"_id,
                              canvas_stroke_rect{ { 0.0f, size, 0.0f, size },
@@ -340,11 +340,11 @@ namespace animgui {
             canvas_text{ { size + 2.0f * style.padding.x, style.padding.y }, std::move(label), style.font, style.font_color };
         const auto [w, h] = canvas.calculate_bounds(text);
         canvas.add_primitive("label"_id, std::move(text));
-        canvas.pop_region(bounds{ 0.0f, w + size + 2.0f * style.padding.x, 0.0f, h + style.padding.y });
+        canvas.pop_region(bounds_aabb{ 0.0f, w + size + 2.0f * style.padding.x, 0.0f, h + style.padding.y });
     }
     ANIMGUI_API void progressbar(canvas& canvas, const float width, const float progress, std::optional<std::pmr::string> label) {
         auto&& style = canvas.style();
-        const bounds box{ 0.0f, width, 0.0f, 2.0f * style.padding.y + style.font->height() };
+        const bounds_aabb box{ 0.0f, width, 0.0f, 2.0f * style.padding.y + style.font->height() };
         canvas.push_region(mix(canvas.region_sub_uid(), "bounds"_id), box);
         canvas.add_primitive("base"_id, canvas_fill_rect{ box, style.highlight_color });
         // TODO: color mapping
@@ -363,7 +363,7 @@ namespace animgui {
     ANIMGUI_API void radio_button(canvas& canvas, const std::pmr::vector<std::pmr::string>& labels, size_t& index) {
         auto&& style = canvas.style();
         canvas.push_region(canvas.region_sub_uid());
-        bounds box{ 0.0f, 0.0f, 0.0f, 0.0f };
+        bounds_aabb box{ 0.0f, 0.0f, 0.0f, 0.0f };
         if(index >= labels.size())
             index = 0;
 
@@ -389,7 +389,7 @@ namespace animgui {
 
             canvas.add_primitive("label"_id, std::move(text));
 
-            canvas.pop_region(bounds{ box.right, box.right + w, 0.0f, h });
+            canvas.pop_region(bounds_aabb{ box.right, box.right + w, 0.0f, h });
             box.bottom = std::fmax(box.bottom, h);
             box.right += w;
         }
@@ -401,13 +401,13 @@ namespace animgui {
     static void slider_impl(canvas& canvas, const float width, const float handle_width, T& val, const T min, const T max) {
         auto&& style = canvas.style();
         const auto height = style.font->height() + 2.0f * style.padding.y;
-        const auto full_uid = canvas.push_region(canvas.region_sub_uid(), bounds{ 0.0f, width, 0.0f, height }).second;
+        const auto full_uid = canvas.push_region(canvas.region_sub_uid(), bounds_aabb{ 0.0f, width, 0.0f, height }).second;
 
         const auto base_height = 3 * style.bounds_edge_width;
 
         canvas.add_primitive(
             "base"_id,
-            canvas_fill_rect{ bounds{ 0.0f, width, (height - base_height) / 2.0f, (height + base_height) / 2.0f },
+            canvas_fill_rect{ bounds_aabb{ 0.0f, width, (height - base_height) / 2.0f, (height + base_height) / 2.0f },
                               style.background_color });
 
         assert(min <= val && val <= max);
@@ -434,9 +434,9 @@ namespace animgui {
 
         canvas.add_primitive(
             "base"_id,
-            canvas_fill_rect{ bounds{ 0.0f, handle_width, 0.0f, height }, focused ? style.highlight_color : style.normal_color });
+            canvas_fill_rect{ bounds_aabb{ 0.0f, handle_width, 0.0f, height }, focused ? style.highlight_color : style.normal_color });
         const auto center = scale * progress + half_width;
-        canvas.pop_region(bounds{ center - half_width, center + half_width, 0.0f, height });
+        canvas.pop_region(bounds_aabb{ center - half_width, center + half_width, 0.0f, height });
 
         canvas.pop_region();
     }
@@ -452,7 +452,7 @@ namespace animgui {
         auto&& style = canvas.style();
         const auto width = style.font->standard_width() * 3 + 2.0f * style.padding.x;
         const auto height = style.font->height() + 2.0f * style.padding.y;
-        const auto box = bounds{ 0.0f, width * 2.0f, 0.0f, height };
+        const auto box = bounds_aabb{ 0.0f, width * 2.0f, 0.0f, height };
         const auto uid = canvas.push_region(canvas.region_sub_uid(), box).second;
         const auto pressed = canvas.input_backend().action_press();
         const auto focused = canvas.region_request_focus() || canvas.region_hovered();

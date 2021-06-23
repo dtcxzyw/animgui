@@ -5,6 +5,7 @@
 #include <animgui/core/emitter.hpp>
 #include <animgui/core/font_backend.hpp>
 #include <animgui/core/style.hpp>
+#include <cmath>
 #include <stack>
 #include <utf8.h>
 
@@ -13,7 +14,7 @@ namespace animgui {
         static vec2 calc_bounds(const button_base& item, const style& style) {
             return { item.content_size.x + 2 * style.padding.x, item.content_size.y + 2 * style.padding.y };
         }
-        static color select_button_color(const button_status status, const style& style) {
+        static color_rgba select_button_color(const button_status status, const style& style) {
             switch(status) {
                 case button_status::disabled:
                     return style.disabled_color;
@@ -23,10 +24,11 @@ namespace animgui {
                     return style.normal_color;
             }
         }
-        static void emit(const button_base& item, const bounds& clip_rect, const vec2 offset, std::pmr::vector<command>& commands,
-                         const style& style, const std::function<texture_region(font&, glyph)>&) {
-            auto rect = bounds{ item.anchor.x, item.anchor.x + item.content_size.x + 2 * style.padding.x, item.anchor.y,
-                                item.anchor.y + item.content_size.y + 2 * style.padding.y };
+        static void emit(const button_base& item, const bounds_aabb& clip_rect, const vec2 offset,
+                         std::pmr::vector<command>& commands, const style& style,
+                         const std::function<texture_region(font&, glyph)>&) {
+            auto rect = bounds_aabb{ item.anchor.x, item.anchor.x + item.content_size.x + 2 * style.padding.x, item.anchor.y,
+                                     item.anchor.y + item.content_size.y + 2 * style.padding.y };
             auto render_rect = rect;
             if(!clip_bounds(rect, offset, clip_rect))
                 return;
@@ -55,10 +57,10 @@ namespace animgui {
         static vec2 calc_bounds(const canvas_stroke_rect& item, const style&) {
             return { item.bounds.right - item.bounds.left + item.size, item.bounds.bottom - item.bounds.top + item.size };
         }
-        static void emit(const canvas_stroke_rect& item, const bounds& clip_rect, const vec2 offset,
+        static void emit(const canvas_stroke_rect& item, const bounds_aabb& clip_rect, const vec2 offset,
                          std::pmr::vector<command>& commands, const style&, const std::function<texture_region(font&, glyph)>&) {
-            if(auto rect = bounds{ item.bounds.left - item.size / 2.0f, item.bounds.right + item.size / 2.0f,
-                                   item.bounds.top - item.size / 2.0f, item.bounds.bottom + item.size / 2.0f };
+            if(auto rect = bounds_aabb{ item.bounds.left - item.size / 2.0f, item.bounds.right + item.size / 2.0f,
+                                        item.bounds.top - item.size / 2.0f, item.bounds.bottom + item.size / 2.0f };
                !clip_bounds(rect, offset, clip_rect))
                 return;
             auto render_rect = item.bounds;
@@ -79,7 +81,7 @@ namespace animgui {
         static vec2 calc_bounds(const canvas_fill_rect& item, const style&) {
             return { item.bounds.right - item.bounds.left, item.bounds.bottom - item.bounds.top };
         }
-        static void emit(const canvas_fill_rect& item, const bounds& clip_rect, const vec2 offset,
+        static void emit(const canvas_fill_rect& item, const bounds_aabb& clip_rect, const vec2 offset,
                          std::pmr::vector<command>& commands, const style&, const std::function<texture_region(font&, glyph)>&) {
             auto rect = item.bounds;
             if(!clip_bounds(rect, offset, clip_rect))
@@ -98,14 +100,14 @@ namespace animgui {
                                              0.0f } });
         }
         static vec2 calc_bounds(const canvas_line& item, const style&) {
-            return { std::fabsf(item.start.x - item.end.x) + item.size, std::fabsf(item.start.y - item.end.y) + item.size };
+            return { std::fabs(item.start.x - item.end.x) + item.size, std::fabs(item.start.y - item.end.y) + item.size };
         }
-        static void emit(const canvas_line& item, const bounds& clip_rect, const vec2 offset, std::pmr::vector<command>& commands,
-                         const style&, const std::function<texture_region(font&, glyph)>&) {
-            if(auto rect = bounds{ std::fminf(item.start.x, item.end.x) - item.size / 2.0f,
-                                   std::fmaxf(item.start.x, item.end.x) + item.size / 2.0f,
-                                   std::fminf(item.start.y, item.end.y) - item.size / 2.0f,
-                                   std::fmaxf(item.start.y, item.end.y) + item.size / 2.0f };
+        static void emit(const canvas_line& item, const bounds_aabb& clip_rect, const vec2 offset,
+                         std::pmr::vector<command>& commands, const style&, const std::function<texture_region(font&, glyph)>&) {
+            if(auto rect = bounds_aabb{ std::fminf(item.start.x, item.end.x) - item.size / 2.0f,
+                                        std::fmaxf(item.start.x, item.end.x) + item.size / 2.0f,
+                                        std::fminf(item.start.y, item.end.y) - item.size / 2.0f,
+                                        std::fmaxf(item.start.y, item.end.y) + item.size / 2.0f };
                !clip_bounds(rect, offset, clip_rect))
                 return;
             const auto p0 = vec2{ offset.x + item.start.x, offset.y + item.start.y },
@@ -121,10 +123,10 @@ namespace animgui {
         static vec2 calc_bounds(const canvas_point& item, const style&) {
             return { item.size, item.size };
         }
-        static void emit(const canvas_point& item, const bounds& clip_rect, const vec2 offset,
+        static void emit(const canvas_point& item, const bounds_aabb& clip_rect, const vec2 offset,
                          std::pmr::vector<command>& commands, const style&, const std::function<texture_region(font&, glyph)>&) {
-            if(auto rect = bounds{ item.pos.x - item.size / 2.0f, item.pos.x + item.size / 2.0f, item.pos.y - item.size / 2.0f,
-                                   item.pos.y + item.size / 2.0f };
+            if(auto rect = bounds_aabb{ item.pos.x - item.size / 2.0f, item.pos.x + item.size / 2.0f,
+                                        item.pos.y - item.size / 2.0f, item.pos.y + item.size / 2.0f };
                !clip_bounds(rect, offset, clip_rect))
                 return;
             const auto unused = vec2{ 0.0f, 0.0f };
@@ -138,7 +140,7 @@ namespace animgui {
         static vec2 calc_bounds(const canvas_image& item, const style&) {
             return { item.bounds.right - item.bounds.left, item.bounds.bottom - item.bounds.top };
         }
-        static void emit(const canvas_image& item, const bounds& clip_rect, const vec2 offset,
+        static void emit(const canvas_image& item, const bounds_aabb& clip_rect, const vec2 offset,
                          std::pmr::vector<command>& commands, const style&, const std::function<texture_region(font&, glyph)>&) {
             if(auto rect = item.bounds; !clip_bounds(rect, offset, clip_rect))
                 return;
@@ -171,7 +173,7 @@ namespace animgui {
             }
             return { width, item.font->height() };
         }
-        static void emit(const canvas_text& item, const bounds& clip_rect, vec2 offset, std::pmr::vector<command>& commands,
+        static void emit(const canvas_text& item, const bounds_aabb& clip_rect, vec2 offset, std::pmr::vector<command>& commands,
                          const style&, const std::function<texture_region(font&, glyph)>& font_callback) {
             offset = offset + item.pos;
             auto beg = item.str.begin();
@@ -215,7 +217,7 @@ namespace animgui {
         static vec2 calc_bounds(const extended_callback& item, const style&) {
             return item.bounds;
         }
-        static void emit(const extended_callback& item, const bounds& clip_rect, const vec2 offset,
+        static void emit(const extended_callback& item, const bounds_aabb& clip_rect, const vec2 offset,
                          std::pmr::vector<command>& commands, const style& style,
                          const std::function<texture_region(font&, glyph)>& font_callback) {
             item.emitter(clip_rect, offset, commands, style, font_callback);
@@ -231,7 +233,7 @@ namespace animgui {
                                             const std::function<texture_region(font&, glyph)>& font_callback) override {
             std::pmr::vector<command> command_list{ m_memory_resource };
             std::pmr::monotonic_buffer_resource arena{ m_memory_resource };
-            stack<std::pair<bounds, vec2>> clip_stack{ &arena };
+            stack<std::pair<bounds_aabb, vec2>> clip_stack{ &arena };
             clip_stack.push({ { 0.0f, size.x, 0.0f, size.y }, { 0.0f, 0.0f } });
             uint32_t clip_discard = 0;
 

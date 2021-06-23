@@ -3,7 +3,6 @@
 #pragma once
 #include <animgui/core/common.hpp>
 #include <memory>
-#include <memory_resource>
 
 namespace animgui {
     class command_optimizer;

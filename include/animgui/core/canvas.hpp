@@ -21,18 +21,18 @@ namespace animgui {
         canvas& operator=(canvas&& rhs) = default;
 
         [[nodiscard]] virtual vec2 calculate_bounds(const primitive& primitive) const = 0;
-        [[nodiscard]] virtual uid region_sub_uid() = 0;
+        [[nodiscard]] virtual identifier region_sub_uid() = 0;
 
-        virtual std::pair<size_t, uid> push_region(uid uid, const std::optional<bounds>& reserved_bounds = std::nullopt) = 0;
-        virtual void pop_region(const std::optional<bounds>& new_bounds = std::nullopt) = 0;
-        virtual std::pair<size_t, uid> add_primitive(uid uid, primitive primitive) = 0;
+        virtual std::pair<size_t, identifier> push_region(identifier uid, const std::optional<bounds_aabb>& reserved_bounds = std::nullopt) = 0;
+        virtual void pop_region(const std::optional<bounds_aabb>& new_bounds = std::nullopt) = 0;
+        virtual std::pair<size_t, identifier> add_primitive(identifier uid, primitive primitive) = 0;
         [[nodiscard]] virtual vec2 reserved_size() const noexcept = 0;
         virtual span<operation> commands() noexcept = 0;
 
-        virtual void* raw_storage(size_t hash, uid uid) = 0;
+        virtual void* raw_storage(size_t hash, identifier uid) = 0;
         virtual void register_type(size_t hash, size_t size, size_t alignment, raw_callback ctor, raw_callback dtor) = 0;
         template <typename T>
-        T& storage(const uid uid) {
+        T& storage(const identifier uid) {
             const auto hash = typeid(T).hash_code();
             register_type(
                 hash, sizeof(T), alignof(T),
@@ -46,12 +46,12 @@ namespace animgui {
         [[nodiscard]] virtual input_backend& input_backend() const noexcept = 0;
 
         // TODO: convex polygon/SDF bounds
-        [[nodiscard]] virtual const bounds& region_bounds() const = 0;
+        [[nodiscard]] virtual const bounds_aabb& region_bounds() const = 0;
         [[nodiscard]] virtual vec2 region_offset() const = 0;
         [[nodiscard]] virtual bool region_hovered() const = 0;
-        [[nodiscard]] virtual bool hovered(const bounds& bounds) const = 0;
+        [[nodiscard]] virtual bool hovered(const bounds_aabb& bounds) const = 0;
         [[nodiscard]] virtual bool region_request_focus(bool force = false) = 0;
 
-        [[nodiscard]] virtual float step(uid id, float dest) = 0;
+        [[nodiscard]] virtual float step(identifier id, float dest) = 0;
     };
 }  // namespace animgui

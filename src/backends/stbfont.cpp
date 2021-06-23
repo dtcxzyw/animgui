@@ -69,10 +69,10 @@ namespace animgui {
         [[nodiscard]] glyph to_glyph(const uint32_t codepoint) const override {
             return glyph{ static_cast<uint32_t>(stbtt_FindGlyphIndex(&m_font_info, codepoint)) };
         }
-        [[nodiscard]] bounds calculate_bounds(const glyph glyph) const override {
+        [[nodiscard]] bounds_aabb calculate_bounds(const glyph glyph) const override {
             int x0, y0, x1, y1;
             stbtt_GetGlyphBox(&m_font_info, glyph.idx, &x0, &y0, &x1, &y1);
-            return bounds{ static_cast<float>(x0) * m_render_scale, static_cast<float>(x1) * m_render_scale,
+            return bounds_aabb{ static_cast<float>(x0) * m_render_scale, static_cast<float>(x1) * m_render_scale,
                            static_cast<float>(-y1) * m_render_scale + m_baseline,
                            static_cast<float>(-y0) * m_render_scale + m_baseline };
         }

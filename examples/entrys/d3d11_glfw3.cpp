@@ -47,8 +47,8 @@ int main() {
     glfwSetWindowPos(window, (screen_w - w) / 2, (screen_h - h) / 2);
 
     D3D_FEATURE_LEVEL levels[] = { D3D_FEATURE_LEVEL_11_1, D3D_FEATURE_LEVEL_11_0 };
-    DXGI_SWAP_CHAIN_DESC swap_chain_desc{ { static_cast<uint32_t>(800),
-                                            static_cast<uint32_t>(600),
+    DXGI_SWAP_CHAIN_DESC swap_chain_desc{ { static_cast<uint32_t>(w),
+                                            static_cast<uint32_t>(h),
                                             {},
                                             DXGI_FORMAT_R8G8B8A8_UNORM,
                                             DXGI_MODE_SCANLINE_ORDER_UNSPECIFIED,
