@@ -22,56 +22,56 @@ namespace animgui {
 
     public:
         explicit demo(context& context) {
-            auto&& style = context.style();
-            style.font = context.load_font("msyh", 30.0f);
+            auto&& style = context.global_style();
+            style.default_font = context.load_font("msyh", 30.0f);
         }
-        void test_game_pad(row_layout_canvas& canvas) const {
-            auto&& input_backend = canvas.input_backend();
+        void test_game_pad(row_layout_canvas& layout) const {
+            auto&& input_backend = layout.input();
             for(auto idx : input_backend.list_game_pad()) {
-                text(canvas, std::pmr::string{ std::to_string(idx) + " " } + input_backend.get_game_pad_name(idx));
-                canvas.newline();
+                text(layout, std::pmr::string{ std::to_string(idx) + " " } + input_backend.get_game_pad_name(idx));
+                layout.newline();
                 auto&& state = input_backend.get_game_pad_state(idx);
 
-                text(canvas,
+                text(layout,
                      std::pmr::string{ "leftX: " + std::to_string(state.left_axis.x) +
                                        " leftY: " + std::to_string(state.left_axis.y) });
-                canvas.newline();
-                text(canvas,
+                layout.newline();
+                text(layout,
                      std::pmr::string{ "rightX: " + std::to_string(state.right_axis.x) +
                                        " rightY: " + std::to_string(state.right_axis.y) });
-                canvas.newline();
-                text(canvas,
+                layout.newline();
+                text(layout,
                      std::pmr::string{ "left trigger: " + std::to_string(state.left_trigger) +
                                        " right trigger: " + std::to_string(state.right_trigger) });
-                canvas.newline();
+                layout.newline();
 
                 auto show_status = [&](const std::string& str, const bool status) {
-                    text(canvas, std::pmr::string{ str + (status ? " Down" : " Up") });
+                    text(layout, std::pmr::string{ str + (status ? " Down" : " Up") });
                 };
                 show_status("A", state.a);
                 show_status("B", state.b);
                 show_status("X", state.x);
                 show_status("Y", state.y);
-                canvas.newline();
+                layout.newline();
                 show_status("L bumper", state.left_bumper);
                 show_status("R bumper", state.right_bumper);
                 show_status("L thumb", state.left_thumb);
                 show_status("R thumb", state.right_thumb);
-                canvas.newline();
+                layout.newline();
                 show_status("back", state.back);
                 show_status("start", state.start);
                 show_status("guide", state.guide);
-                canvas.newline();
+                layout.newline();
                 show_status("D-pad up", state.d_pad_up);
                 show_status("D-pad right", state.d_pad_right);
                 show_status("D-pad down", state.d_pad_down);
                 show_status("D-pad left", state.d_pad_left);
-                canvas.newline();
+                layout.newline();
             }
         }
-        void render(canvas& canvas) override {
+        void render(canvas& canvas_root) override {
             single_window(
-                canvas, "Test",
+                canvas_root, "Test",
                 window_attributes::closable | window_attributes::minimizable | window_attributes::maximizable |
                     window_attributes::movable,
                 [&](window_canvas& full) {
@@ -80,7 +80,7 @@ namespace animgui {
                             layout_row_center(window, [&](row_layout_canvas& layout) {
                                 text(layout, "Hello World 你好 世界");
                                 layout.newline();
-                                const auto [x, y] = layout.input_backend().get_cursor_pos();
+                                const auto [x, y] = layout.input().get_cursor_pos();
                                 text(layout, std::pmr::string{ "X: " + std::to_string(x) + " Y: " + std::to_string(y) });
                                 layout.newline();
                                 text(layout, "Click: " + std::pmr::string{ std::to_string(m_count) });
@@ -115,7 +115,7 @@ namespace animgui {
                                 }
                                 layout.newline();
                                 if(button_label(layout, "Exit")) {
-                                    layout.input_backend().close_window();
+                                    layout.input().close_window();
                                 }
                             });
                         });

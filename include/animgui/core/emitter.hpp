@@ -45,13 +45,13 @@ namespace animgui {
     struct canvas_text final {
         vec2 pos;
         std::pmr::string str;
-        std::shared_ptr<font> font;
+        std::shared_ptr<font> font_ref;
         color_rgba color;
     };
 
     struct extended_callback final {
         std::function<void(const bounds_aabb&, vec2, std::pmr::vector<command>&, const style&,
-                           const std::function<texture_region(font&, glyph)>&)>
+                           const std::function<texture_region(font&, glyph_id)>&)>
             emitter;
         vec2 bounds;
     };
@@ -59,11 +59,11 @@ namespace animgui {
     using primitive = std::variant<button_base, canvas_fill_rect, canvas_stroke_rect, canvas_line, canvas_point, canvas_image,
                                    canvas_text, extended_callback>;
 
-    struct push_region final {
+    struct op_push_region final {
         bounds_aabb bounds;
     };
-    struct pop_region final {};
-    using operation = std::variant<push_region, pop_region, primitive>;
+    struct op_pop_region final {};
+    using operation = std::variant<op_push_region, op_pop_region, primitive>;
 
     class emitter {
     public:
@@ -75,7 +75,7 @@ namespace animgui {
         virtual ~emitter() = default;
 
         virtual std::pmr::vector<command> transform(vec2 size, span<operation> operations, const style& style,
-                                                    const std::function<texture_region(font&, glyph)>& font_callback) = 0;
+                                                    const std::function<texture_region(font&, glyph_id)>& font_callback) = 0;
         virtual vec2 calculate_bounds(const primitive& primitive, const style& style) = 0;
     };
 }  // namespace animgui

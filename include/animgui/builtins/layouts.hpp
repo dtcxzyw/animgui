@@ -22,13 +22,13 @@ namespace animgui {
         std::pair<size_t, identifier> push_region(identifier uid, const std::optional<bounds_aabb>& reserved_bounds) override;
         std::pair<size_t, identifier> add_primitive(identifier uid, primitive primitive) override;
         float step(identifier id, float dest) final;
-        [[nodiscard]] const animgui::style& style() const noexcept final;
+        [[nodiscard]] const style& global_style() const noexcept final;
         [[nodiscard]] vec2 calculate_bounds(const primitive& primitive) const final;
         span<operation> commands() noexcept final;
         [[nodiscard]] bool hovered(const bounds_aabb& bounds) const override;
         [[nodiscard]] std::pmr::memory_resource* memory_resource() const noexcept final;
         identifier region_sub_uid() override;
-        [[nodiscard]] animgui::input_backend& input_backend() const noexcept override;
+        [[nodiscard]] input_backend& input() const noexcept override;
         bool region_request_focus(bool force) override;
         [[nodiscard]] vec2 region_offset() const final;
     };

@@ -29,7 +29,8 @@ namespace animgui {
     void layout_proxy::pop_region(const std::optional<bounds_aabb>& new_bounds) {
         m_parent.pop_region(new_bounds);
     }
-    std::pair<size_t, identifier> layout_proxy::push_region(const identifier uid, const std::optional<bounds_aabb>& reserved_bounds) {
+    std::pair<size_t, identifier> layout_proxy::push_region(const identifier uid,
+                                                            const std::optional<bounds_aabb>& reserved_bounds) {
         const auto [idx, id] = m_parent.push_region(uid, reserved_bounds);
         return { idx - m_offset, id };
     }
@@ -41,8 +42,8 @@ namespace animgui {
         return m_parent.region_request_focus(force);
     }
 
-    const style& layout_proxy::style() const noexcept {
-        return m_parent.style();
+    const style& layout_proxy::global_style() const noexcept {
+        return m_parent.global_style();
     }
     bool layout_proxy::hovered(const bounds_aabb& bounds) const {
         return m_parent.hovered(bounds);
@@ -59,8 +60,8 @@ namespace animgui {
     identifier layout_proxy::region_sub_uid() {
         return m_parent.region_sub_uid();
     }
-    input_backend& layout_proxy::input_backend() const noexcept {
-        return m_parent.input_backend();
+    input_backend& layout_proxy::input() const noexcept {
+        return m_parent.input();
     }
 
     vec2 layout_proxy::region_offset() const {
@@ -87,13 +88,13 @@ namespace animgui {
             const auto width = reserved_size().x;
             if(!m_current_line.empty()) {
                 const auto total_width =
-                    width_sum + std::fmax(0.0f, static_cast<float>(m_current_line.size()) - 1.0f) * style().spacing.x;
+                    width_sum + std::fmax(0.0f, static_cast<float>(m_current_line.size()) - 1.0f) * global_style().spacing.x;
                 m_max_total_width = std::fmaxf(m_max_total_width, total_width);
                 auto alignment = m_alignment;
                 if(alignment == row_alignment::justify && (m_current_line.size() == 1 || width < width_sum))
                     alignment = row_alignment::middle;
                 auto offset = 0.0f;
-                auto spacing = style().spacing.x;
+                auto spacing = global_style().spacing.x;
 
                 switch(alignment) {
                     case row_alignment::left:
@@ -113,20 +114,21 @@ namespace animgui {
                 const auto span = commands();
                 for(auto&& [id, idx, size] : m_current_line) {
                     const auto new_bounds = bounds_aabb{ offset, offset + size.x, m_vertical_offset, m_vertical_offset + size.y };
-                    std::get<animgui::push_region>(span[idx]).bounds = new_bounds;
+                    std::get<op_push_region>(span[idx]).bounds = new_bounds;
                     storage<bounds_aabb>(mix(id, "last_bounds"_id)) = new_bounds;
                     offset += size.x + spacing;
                 }
             }
 
-            m_vertical_offset += max_height + style().spacing.y;
+            m_vertical_offset += max_height + global_style().spacing.y;
             m_current_line.clear();
         }
 
     public:
         row_layout_canvas_impl(canvas& parent, const row_alignment alignment)
             : row_layout_canvas{ parent }, m_alignment{ alignment }, m_current_line{ parent.memory_resource() } {}
-        std::pair<size_t, identifier> push_region(const identifier uid, const std::optional<bounds_aabb>& reserved_bounds) override {
+        std::pair<size_t, identifier> push_region(const identifier uid,
+                                                  const std::optional<bounds_aabb>& reserved_bounds) override {
             const auto [idx, id] = layout_proxy::push_region(uid, reserved_bounds);
             if(++m_current_depth == 1) {
                 m_current_line.emplace_back(id, idx, vec2{});
@@ -136,7 +138,8 @@ namespace animgui {
         void pop_region(const std::optional<bounds_aabb>& new_bounds) override {
             m_parent.pop_region(new_bounds);
             if(--m_current_depth == 0) {
-                const auto [x1, x2, y1, y2] = storage<bounds_aabb>(mix(std::get<identifier>(m_current_line.back()), "last_bounds"_id));
+                const auto [x1, x2, y1, y2] =
+                    storage<bounds_aabb>(mix(std::get<identifier>(m_current_line.back()), "last_bounds"_id));
                 std::get<vec2>(m_current_line.back()) = { x2 - x1, y2 - y1 };
             }
         }
@@ -145,22 +148,22 @@ namespace animgui {
         }
         vec2 finish() {
             flush();
-            return { m_max_total_width, m_vertical_offset - style().spacing.y };
+            return { m_max_total_width, m_vertical_offset - global_style().spacing.y };
         }
     };
 
     ANIMGUI_API vec2 layout_row(canvas& parent, const row_alignment alignment,
                                 const std::function<void(row_layout_canvas&)>& render_function) {
-        row_layout_canvas_impl canvas{ parent, alignment };
-        render_function(canvas);
-        return canvas.finish();
+        row_layout_canvas_impl canvas_node{ parent, alignment };
+        render_function(canvas_node);
+        return canvas_node.finish();
     }
 
     ANIMGUI_API bounds_aabb layout_row_center(canvas& parent, const std::function<void(row_layout_canvas&)>& render_function) {
         parent.push_region("layout_center_region"_id);
         const auto [w, h] = layout_row(parent, row_alignment::middle, render_function);
         const auto offset_y = (parent.reserved_size().y - h) / 2.0f;
-        const auto bounds = animgui::bounds_aabb{ 0.0f, parent.reserved_size().x, offset_y, offset_y + h };
+        const auto bounds = bounds_aabb{ 0.0f, parent.reserved_size().x, offset_y, offset_y + h };
         parent.pop_region(bounds);
         return bounds;
     }
@@ -171,7 +174,7 @@ namespace animgui {
         parent.push_region(parent.region_sub_uid(), bounds);
         parent.add_primitive(
             parent.region_sub_uid(),
-            canvas_stroke_rect{ bounds, parent.style().highlight_color, parent.style().panel_bounds_edge_width });
+            canvas_stroke_rect{ bounds, parent.global_style().highlight_color, parent.global_style().panel_bounds_edge_width });
         render_function(parent);
         parent.pop_region();
     }
@@ -199,8 +202,7 @@ namespace animgui {
 
     public:
         window_canvas_impl(canvas& parent, const bounds_aabb& bounds, std::optional<std::pmr::string> title,
-                           const window_attributes attributes, window_operator& operator_,
-                           animgui::bounds_aabb* absolute_bounds = nullptr)
+                           const window_attributes attributes, window_operator& operator_, bounds_aabb* absolute_bounds = nullptr)
             : window_canvas{ parent }, m_attributes{ attributes }, m_operator{ operator_ }, m_size{ bounds.size() } {
             const auto full_id = layout_proxy::push_region("window"_id, bounds).second;
             if(absolute_bounds)
@@ -208,45 +210,46 @@ namespace animgui {
             if(selected(*this, full_id))
                 m_operator.focus();
 
-            layout_proxy::add_primitive("window_background"_id,
-                                        canvas_fill_rect{ { 0.0f, m_size.x, 0.0f, m_size.y }, style().panel_background_color });
+            layout_proxy::add_primitive(
+                "window_background"_id,
+                canvas_fill_rect{ { 0.0f, m_size.x, 0.0f, m_size.y }, global_style().panel_background_color });
             layout_proxy::add_primitive("window_bounds"_id,
                                         canvas_stroke_rect{ { 0.0f, m_size.x, 0.0f, m_size.y },
-                                                            style().highlight_color,
-                                                            layout_proxy::style().panel_bounds_edge_width });
-            const auto height = style().font->height() * 1.1f;
+                                                            global_style().highlight_color,
+                                                            layout_proxy::global_style().panel_bounds_edge_width });
+            const auto height = global_style().default_font->height() * 1.1f;
 
             if(!has_attribute(m_attributes, window_attributes::no_title_bar)) {
-                const animgui::bounds_aabb bar{ 0.0f, m_size.x, 0.0f, height };
+                const bounds_aabb bar{ 0.0f, m_size.x, 0.0f, height };
                 // ReSharper disable once CppTooWideScope
                 const auto bar_uid = layout_proxy::push_region("title_bar"_id, bar).second;
 
                 if(has_attribute(m_attributes, window_attributes::movable) && selected(*this, bar_uid)) {
-                    m_operator.move(layout_proxy::input_backend().mouse_move());
+                    m_operator.move(layout_proxy::input().mouse_move());
                 }
 
-                layout_proxy::add_primitive("background"_id, canvas_fill_rect{ bar, style().background_color });
+                layout_proxy::add_primitive("background"_id, canvas_fill_rect{ bar, global_style().background_color });
                 if(title.has_value())
                     layout_row(*this, row_alignment::left,
-                               [&](row_layout_canvas& canvas) { text(canvas, std::move(title.value())); });
-                layout_row(*this, row_alignment::right, [&](row_layout_canvas& canvas) {
+                               [&](row_layout_canvas& layout) { text(layout, std::move(title.value())); });
+                layout_row(*this, row_alignment::right, [&](row_layout_canvas& layout) {
                     if(has_attribute(attributes, window_attributes::minimizable)) {
-                        if(button_label(canvas, "\u2501"))
+                        if(button_label(layout, "\u2501"))
                             m_operator.minimize();
                     }
                     if(has_attribute(attributes, window_attributes::maximizable)) {
-                        if(button_label(canvas, "\u25A1"))
+                        if(button_label(layout, "\u25A1"))
                             m_operator.maximize();
                     }
                     if(has_attribute(attributes, window_attributes::closable)) {
-                        if(button_label(canvas, "X"))
+                        if(button_label(layout, "X"))
                             m_operator.close();
                     }
                 });
                 layout_proxy::pop_region(std::nullopt);
-                const auto padding = style().padding;
+                const auto padding = global_style().padding;
                 layout_proxy::push_region(
-                    "content"_id, animgui::bounds_aabb{ padding.x, m_size.x - padding.x, height + padding.y, m_size.y - padding.y });
+                    "content"_id, bounds_aabb{ padding.x, m_size.x - padding.x, height + padding.y, m_size.y - padding.y });
             }
         }
         void close() override {
@@ -298,11 +301,11 @@ namespace animgui {
 
     ANIMGUI_API void single_window(canvas& parent, std::optional<std::pmr::string> title, const window_attributes attributes,
                                    const std::function<void(window_canvas&)>& render_function) {
-        native_window_operator operator_{ parent.input_backend() };
+        native_window_operator operator_{ parent.input() };
         const auto [x, y] = parent.reserved_size();
-        window_canvas_impl canvas{ parent, { 0.0f, x, 0.0f, y }, std::move(title), attributes, operator_ };
-        render_function(canvas);
-        canvas.finish();
+        window_canvas_impl canvas_node{ parent, { 0.0f, x, 0.0f, y }, std::move(title), attributes, operator_ };
+        render_function(canvas_node);
+        canvas_node.finish();
     }
 
     class multiple_window_canvas_impl;
@@ -312,7 +315,8 @@ namespace animgui {
         identifier m_id;
 
     public:
-        explicit multiple_window_operator(multiple_window_canvas_impl& canvas, const identifier id) : m_canvas{ canvas }, m_id{ id } {}
+        explicit multiple_window_operator(multiple_window_canvas_impl& parent, const identifier id)
+            : m_canvas{ parent }, m_id{ id } {}
         void close() override;
         void minimize() override {}
         void maximize() override {}
@@ -323,7 +327,7 @@ namespace animgui {
     struct windows_info final {
         identifier id;
         bounds_aabb bounds;
-        animgui::bounds_aabb absolute_bounds;
+        bounds_aabb absolute_bounds;
         bool is_open;
         bool auto_adjust;
         windows_info() = delete;
@@ -341,7 +345,7 @@ namespace animgui {
         [[nodiscard]] bounds_aabb default_bounds() const {
             const auto size = reserved_size();
             const auto cnt = static_cast<float>(m_info.size());
-            return { cnt * style().font->height(), size.x, cnt * style().font->height(), size.y };
+            return { cnt * global_style().default_font->height(), size.x, cnt * global_style().default_font->height(), size.y };
         }
 
         [[nodiscard]] windows_info& locate_window(const identifier id) const {
@@ -387,11 +391,11 @@ namespace animgui {
 
                 const auto size = reserved_size();
                 m_current = id;
-                push_region(id, animgui::bounds_aabb{ 0.0f, size.x, 0.0f, size.y });
+                push_region(id, bounds_aabb{ 0.0f, size.x, 0.0f, size.y });
                 clamp_bounds(bounds, size);
-                window_canvas_impl canvas{ *this, bounds, std::move(title), attributes, operator_, &absolute_bounds };
-                render_function(canvas);
-                canvas.finish();
+                window_canvas_impl canvas_node{ *this, bounds, std::move(title), attributes, operator_, &absolute_bounds };
+                render_function(canvas_node);
+                canvas_node.finish();
                 pop_region(std::nullopt);
 
                 const auto end = commands().size();
@@ -399,13 +403,13 @@ namespace animgui {
                 // TODO: formalize interface
                 if(auto_adjust) {
                     std::pmr::vector<vec2> offset{ { { 0.0f, 0.0f } }, memory_resource() };
-                    animgui::bounds_aabb content_bounds{ 0.0f, 0.0f, 0.0f, 0.0f }, sub_bounds{ 0.0f, 0.0f, 0.0f, 0.0f };
+                    bounds_aabb content_bounds{ 0.0f, 0.0f, 0.0f, 0.0f }, sub_bounds{ 0.0f, 0.0f, 0.0f, 0.0f };
                     bool valid = false;
                     for(size_t idx = beg; idx < end; ++idx) {
                         // ReSharper disable once CppDefaultCaseNotHandledInSwitchStatement
                         switch(const auto& cmd = commands()[idx]; cmd.index()) {
                             case 0: {
-                                sub_bounds = std::get<animgui::push_region>(cmd).bounds;
+                                sub_bounds = std::get<op_push_region>(cmd).bounds;
                                 const auto current = offset.back();
                                 offset.push_back({ current.x + sub_bounds.left, current.y + sub_bounds.top });
                                 valid = true;
@@ -541,8 +545,8 @@ namespace animgui {
     }
 
     ANIMGUI_API void multiple_window(canvas& parent, const std::function<void(multiple_window_canvas&)>& render_function) {
-        multiple_window_canvas_impl canvas{ parent };
-        render_function(canvas);
-        canvas.finish();
+        multiple_window_canvas_impl canvas_node{ parent };
+        render_function(canvas_node);
+        canvas_node.finish();
     }
 }  // namespace animgui

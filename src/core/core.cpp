@@ -120,7 +120,7 @@ namespace animgui {
     class canvas_impl final : public canvas {
         context& m_context;
         vec2 m_size;
-        animgui::input_backend& m_input_backend;
+        input_backend& m_input_backend;
         step_function m_step_function;
         emitter& m_emitter;
         state_manager& m_state_manager;
@@ -132,12 +132,11 @@ namespace animgui {
         std::pmr::vector<std::pair<identifier, vec2>> m_focusable_region;
 
     public:
-        canvas_impl(context& context, const vec2 size, animgui::input_backend& input_backend, animator& animator,
-                    const float delta_t, emitter& emitter, state_manager& state_manager,
-                    std::pmr::memory_resource* memory_resource)
-            : m_context{ context }, m_size{ size }, m_input_backend{ input_backend }, m_step_function{ animator.step(delta_t) },
+        canvas_impl(context& context, const vec2 size, input_backend& input, animator& animator, const float delta_t,
+                    emitter& emitter, state_manager& state_manager, std::pmr::memory_resource* memory_resource)
+            : m_context{ context }, m_size{ size }, m_input_backend{ input }, m_step_function{ animator.step(delta_t) },
               m_emitter{ emitter }, m_state_manager{ state_manager }, m_memory_resource{ memory_resource },
-              m_input_mode{ input_backend.get_input_mode() }, m_commands{ m_memory_resource },
+              m_input_mode{ m_input_backend.get_input_mode() }, m_commands{ m_memory_resource },
               m_region_stack{ m_memory_resource }, m_animation_state_hash{ 0 }, m_focusable_region{ memory_resource } {
             const auto [hash, state_size, alignment] = animator.state_storage();
             m_animation_state_hash = hash;
@@ -149,8 +148,8 @@ namespace animgui {
                                        bounds_aabb{ 0.0f, size.x, 0.0f, size.y },
                                        { 0.0f, 0.0f } });
         }
-        [[nodiscard]] const animgui::style& style() const noexcept override {
-            return m_context.style();
+        [[nodiscard]] const style& global_style() const noexcept override {
+            return m_context.global_style();
         }
         [[nodiscard]] void* raw_storage(const size_t hash, const identifier uid) override {
             return m_state_manager.storage(hash, uid);
@@ -163,8 +162,7 @@ namespace animgui {
                 const auto idx = iter->push_command_idx;
                 if(idx == std::numeric_limits<size_t>::max())
                     break;
-                if(const auto size = std::get<animgui::push_region>(m_commands[idx]).bounds.size();
-                   size.x > 0.0f && size.y > 0.0f)
+                if(const auto size = std::get<op_push_region>(m_commands[idx]).bounds.size(); size.x > 0.0f && size.y > 0.0f)
                     return size;
             }
             return m_size;
@@ -174,24 +172,24 @@ namespace animgui {
             m_state_manager.register_type(hash, size, alignment, ctor, dtor);
         }
         void pop_region(const std::optional<bounds_aabb>& bounds) override {
-            m_commands.push_back(animgui::pop_region{});
+            m_commands.push_back(op_pop_region{});
             const auto& info = m_region_stack.back();
             const auto idx = info.push_command_idx;
             const auto uid = info.uid;
             m_region_stack.pop_back();
-            auto&& current_bounds = std::get<animgui::push_region>(m_commands[idx]).bounds;
+            auto&& current_bounds = std::get<op_push_region>(m_commands[idx]).bounds;
             if(bounds.has_value())
                 current_bounds = bounds.value();
-            storage<animgui::bounds_aabb>(mix(uid, "last_bounds"_id)) = current_bounds;
+            storage<bounds_aabb>(mix(uid, "last_bounds"_id)) = current_bounds;
         }
         [[nodiscard]] identifier current_region_uid() const {
             return m_region_stack.back().uid;
         }
         std::pair<size_t, identifier> push_region(const identifier uid, const std::optional<bounds_aabb>& bounds) override {
             const auto idx = m_commands.size();
-            m_commands.push_back(animgui::push_region{ bounds.value_or(animgui::bounds_aabb{ 0.0f, 0.0f, 0.0f, 0.0f }) });
+            m_commands.push_back(op_push_region{ bounds.value_or(bounds_aabb{ 0.0f, 0.0f, 0.0f, 0.0f }) });
             const auto mixed = mix(current_region_uid(), uid);
-            auto last_bounds = storage<animgui::bounds_aabb>(mix(mixed, "last_bounds"_id));
+            auto last_bounds = storage<bounds_aabb>(mix(mixed, "last_bounds"_id));
             const auto& parent = m_region_stack.back();
             const vec2 offset{ last_bounds.left, last_bounds.top };
             clip_bounds(last_bounds, parent.offset, parent.absolute_bounds);
@@ -206,7 +204,6 @@ namespace animgui {
             return hovered(region_bounds());
         }
         [[nodiscard]] bool hovered(const bounds_aabb& bounds) const override {
-            // TODO: window pos to canvas pos
             const auto [x, y] = m_input_backend.get_cursor_pos();
             return bounds.left <= x && x < bounds.right && bounds.top <= y && y < bounds.bottom;
         }
@@ -222,12 +219,12 @@ namespace animgui {
             return m_step_function(dest, m_animation_state_hash ? raw_storage(m_animation_state_hash, id) : nullptr);
         }
         [[nodiscard]] vec2 calculate_bounds(const primitive& primitive) const override {
-            return m_emitter.calculate_bounds(primitive, m_context.style());
+            return m_emitter.calculate_bounds(primitive, m_context.global_style());
         }
         identifier region_sub_uid() override {
             return mix(current_region_uid(), identifier{ m_region_stack.back().random_engine() });
         }
-        [[nodiscard]] animgui::input_backend& input_backend() const noexcept override {
+        [[nodiscard]] input_backend& input() const noexcept override {
             return m_input_backend;
         }
         bool region_request_focus(const bool force) override {
@@ -307,10 +304,11 @@ namespace animgui {
         std::pmr::unordered_map<font*, std::pmr::unordered_map<uint32_t, texture_region>> m_lut;
         image_compactor& m_image_compactor;
 
-        std::pmr::unordered_map<uint32_t, texture_region>& locate(font& font) {
-            const auto iter = m_lut.find(&font);
+        std::pmr::unordered_map<uint32_t, texture_region>& locate(font& font_ref) {
+            const auto iter = m_lut.find(&font_ref);
             if(iter == m_lut.cend())
-                return m_lut.emplace(&font, std::pmr::unordered_map<uint32_t, texture_region>{ m_lut.get_allocator().resource() })
+                return m_lut
+                    .emplace(&font_ref, std::pmr::unordered_map<uint32_t, texture_region>{ m_lut.get_allocator().resource() })
                     .first->second;
             return iter->second;
         }
@@ -321,15 +319,15 @@ namespace animgui {
         void reset() {
             m_lut.clear();
         }
-        texture_region locate(font& font, const glyph glyph) {
-            auto&& lut = locate(font);
+        texture_region locate(font& font_ref, const glyph_id glyph) {
+            auto&& lut = locate(font_ref);
             const auto iter = lut.find(glyph.idx);
             if(iter == lut.cend()) {
                 return lut
                     .emplace(
                         glyph.idx,
-                        font.render_to_bitmap(
-                            glyph, [&](const image_desc& desc) { return m_image_compactor.compact(desc, font.max_scale()); }))
+                        font_ref.render_to_bitmap(
+                            glyph, [&](const image_desc& desc) { return m_image_compactor.compact(desc, font_ref.max_scale()); }))
                     .first->second;
             }
             return iter->second;
@@ -447,7 +445,7 @@ namespace animgui {
             for(auto& [_, desc] : command_list)
                 if(desc.index() == 1) {
                     // ReSharper disable once CppTooWideScope
-                    auto&& [type, vertices, _, point_line_size] = std::get<animgui::primitives>(desc);
+                    auto&& [type, vertices, _, point_line_size] = std::get<primitives>(desc);
                     if(!support_primitive(m_supported_primitive, type)) {
                         std::pmr::vector<vertex> output{ vertices.get_allocator().resource() };
                         output.reserve(vertices.size() * 3);
@@ -495,7 +493,7 @@ namespace animgui {
         codepoint_locator m_codepoint_locator;
         command_fallback_translator m_command_fallback_translator;
         std::pmr::memory_resource* m_memory_resource;
-        animgui::style m_style;
+        style m_style;
 
     public:
         context_impl(input_backend& input_backend, render_backend& render_backend, font_backend& font_backend, emitter& emitter,
@@ -514,26 +512,27 @@ namespace animgui {
             m_codepoint_locator.reset();
             m_image_compactor.reset();
         }
-        animgui::style& style() noexcept override {
+        style& global_style() noexcept override {
             return m_style;
         }
         void new_frame(const uint32_t width, const uint32_t height, const float delta_t,
-                       const std::function<void(canvas& canvas)>& render_function) override {
+                       const std::function<void(canvas&)>& render_function) override {
             std::pmr::monotonic_buffer_resource arena{ 1 << 15, m_memory_resource };
 
-            canvas_impl canvas{ *this,           vec2{ static_cast<float>(width), static_cast<float>(height) },
-                                m_input_backend, m_animator,
-                                delta_t,         m_emitter,
-                                m_state_manager, &arena };
-            render_function(canvas);
-            canvas.finish();
+            canvas_impl canvas_root{ *this,           vec2{ static_cast<float>(width), static_cast<float>(height) },
+                                     m_input_backend, m_animator,
+                                     delta_t,         m_emitter,
+                                     m_state_manager, &arena };
+            render_function(canvas_root);
+            canvas_root.finish();
 
-            auto commands = m_emitter.transform(
-                canvas.reserved_size(), canvas.commands(), m_style,
-                [&](font& font, const glyph glyph) -> texture_region { return m_codepoint_locator.locate(font, glyph); });
+            auto commands = m_emitter.transform(canvas_root.reserved_size(), canvas_root.commands(), m_style,
+                                                [&](font& font_ref, const glyph_id glyph) -> texture_region {
+                                                    return m_codepoint_locator.locate(font_ref, glyph);
+                                                });
             auto optimized_commands = m_command_optimizer.optimize(std::move(commands));
             m_command_fallback_translator.transform(optimized_commands);
-            m_render_backend.update_command_list(std::move(optimized_commands));
+            m_render_backend.update_command_list(uvec2{ width, height }, std::move(optimized_commands));
         }
         texture_region load_image(const image_desc& image, const float max_scale) override {
             return m_image_compactor.compact(image, max_scale);
@@ -552,7 +551,7 @@ namespace animgui {
     }
     texture_region texture_region::sub_region(const bounds_aabb& bounds) const {
         const auto w = region.right - region.left, h = region.bottom - region.top;
-        return { texture,
+        return { tex,
                  { region.left + w * bounds.left, region.left + w * bounds.right, region.top + h * bounds.top,
                    region.top + h * bounds.bottom } };
     }

@@ -41,9 +41,9 @@ namespace animgui {
             return *static_cast<T*>(raw_storage(hash, uid));
         }
 
-        [[nodiscard]] virtual const style& style() const noexcept = 0;
+        [[nodiscard]] virtual const style& global_style() const noexcept = 0;
         [[nodiscard]] virtual std::pmr::memory_resource* memory_resource() const noexcept = 0;
-        [[nodiscard]] virtual input_backend& input_backend() const noexcept = 0;
+        [[nodiscard]] virtual input_backend& input() const noexcept = 0;
 
         // TODO: convex polygon/SDF bounds
         [[nodiscard]] virtual const bounds_aabb& region_bounds() const = 0;

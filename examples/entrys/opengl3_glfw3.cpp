@@ -172,12 +172,16 @@ int main() {
             const auto delta_t = static_cast<float>(current - last);
             last = current;
 
-            ctx->new_frame(w, h, delta_t, [&](animgui::canvas& canvas) { app->render(canvas); });
+            int window_w, window_h;
+            glfwGetWindowSize(window, &window_w, &window_h);
+
+            ctx->new_frame(window_w, window_h, delta_t, [&](animgui::canvas& canvas_root) { app->render(canvas_root); });
 
             glViewport(0, 0, w, h);
             glScissor(0, 0, w, h);
             glClearColor(0, 0, 0, 1);
             glClear(GL_COLOR_BUFFER_BIT);
+
             ogl3_backend->emit(animgui::uvec2{ static_cast<uint32_t>(w), static_cast<uint32_t>(h) });
             glfwSwapBuffers(window);
         };

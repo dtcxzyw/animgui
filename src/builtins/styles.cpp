@@ -6,7 +6,7 @@
 
 namespace animgui {
     void set_classic_style(context& context) {
-        auto&& style = context.style();
+        auto&& style = context.global_style();
         style.spacing = { 8.0f, 8.0f };
         style.rounding = 0.0f;
         style.bounds_edge_width = 3.0f;

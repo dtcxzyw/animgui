@@ -194,6 +194,7 @@ namespace animgui {
         ID3D11Device* m_device;
         ID3D11DeviceContext* m_device_context;
         std::function<void(long)> m_error_checker;
+        vec2 m_window_size;
 
         ID3D11Buffer* m_vertex_buffer = nullptr;
         size_t m_vertex_buffer_size = 0;
@@ -231,13 +232,12 @@ namespace animgui {
             m_device_context->Unmap(m_vertex_buffer, 0);
         }
 
-        static void emit(const native_callback& callback, const bounds_aabb& clip, uvec2) {
+        static void emit(const native_callback& callback, const bounds_aabb& clip, vec2) {
             callback(clip);
         }
         static D3D11_PRIMITIVE_TOPOLOGY get_primitive_type(const primitive_type type) noexcept {
-            // ReSharper disable once CppDefaultCaseNotHandledInSwitchStatement
-            // ReSharper disable once CppIncompleteSwitchStatement
-            switch(type) {
+            // ReSharper disable once CppDefaultCaseNotHandledInSwitchStatement CppIncompleteSwitchStatement
+            switch(type) {  // NOLINT(clang-diagnostic-switch)
                 case primitive_type::triangles:
                     return D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
                 case primitive_type::triangle_strip:
@@ -246,8 +246,8 @@ namespace animgui {
             return static_cast<D3D11_PRIMITIVE_TOPOLOGY>(0);
         }
 
-        void emit(const primitives& primitives, const bounds_aabb& clip, const uvec2 screen_size) {
-            auto&& [type, vertices, texture, point_line_size] = primitives;
+        void emit(const primitives& primitives, const bounds_aabb& clip, const vec2 window_size) {
+            auto&& [type, vertices, tex, point_line_size] = primitives;
 
             m_device_context->RSSetState(m_rasterizer_state);
             const LONG left = static_cast<int>(std::floor(clip.left));
@@ -279,15 +279,15 @@ namespace animgui {
                 D3D11_MAPPED_SUBRESOURCE mapped_resource;
                 check_d3d_error(m_device_context->Map(m_constant_buffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped_resource));
                 auto& uniform = *static_cast<constant_buffer*>(mapped_resource.pData);
-                uniform.size = { static_cast<float>(screen_size.x), static_cast<float>(screen_size.y) };
-                uniform.mode = (texture ? (texture->channels() == channel::alpha ? 1 : 0) : 2);
+                uniform.size = { static_cast<float>(window_size.x), static_cast<float>(window_size.y) };
+                uniform.mode = (tex ? (tex->channels() == channel::alpha ? 1 : 0) : 2);
                 m_device_context->Unmap(m_constant_buffer, 0);
             }
             m_device_context->IASetPrimitiveTopology(get_primitive_type(type));
             m_device_context->PSSetSamplers(0, 1, &m_sampler_state);
-            if(texture) {
-                texture->generate_mipmap();
-                const auto texture_srv = reinterpret_cast<ID3D11ShaderResourceView*>(texture->native_handle());
+            if(tex) {
+                tex->generate_mipmap();
+                const auto texture_srv = reinterpret_cast<ID3D11ShaderResourceView*>(tex->native_handle());
                 m_device_context->PSSetShaderResources(0, 1, &texture_srv);
             }
 
@@ -296,7 +296,9 @@ namespace animgui {
 
     public:
         d3d11_backend(ID3D11Device* device, ID3D11DeviceContext* device_context, std::function<void(long)> error_checker)
-            : m_device{ device }, m_device_context{ device_context }, m_error_checker{ std::move(error_checker) } {
+            : m_device{ device }, m_device_context{ device_context }, m_error_checker{ std::move(error_checker) }, m_window_size{
+                  0.0f, 0.0f
+              } {
 
             {
                 ID3DBlob* vertex_shader_blob;
@@ -398,14 +400,15 @@ namespace animgui {
             m_blend_state->Release();
             m_depth_stencil_state->Release();
         }
-        void update_command_list(std::pmr::vector<command> command_list) override {
+        void update_command_list(const uvec2 window_size, std::pmr::vector<command> command_list) override {
+            m_window_size = { static_cast<float>(window_size.x), static_cast<float>(window_size.y) };
             m_command_list = std::move(command_list);
         }
         void emit(uvec2 screen_size) override {
             // ReSharper disable once CppUseStructuredBinding
             for(auto&& command : m_command_list) {
                 auto&& clip = command.clip;
-                std::visit([&](auto&& item) { emit(item, clip, screen_size); }, command.desc);
+                std::visit([&](auto&& item) { emit(item, clip, m_window_size); }, command.desc);
             }
         }
         std::shared_ptr<texture> create_texture(uvec2 size, channel channels) override {

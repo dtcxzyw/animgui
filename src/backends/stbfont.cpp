@@ -43,7 +43,7 @@ namespace animgui {
         [[nodiscard]] float height() const noexcept override {
             return m_height;
         }
-        texture_region render_to_bitmap(const glyph glyph,
+        texture_region render_to_bitmap(const glyph_id glyph,
                                         const std::function<texture_region(const image_desc&)>& image_uploader) const override {
             int x0, y0, x1, y1;
             stbtt_GetGlyphBitmapBox(&m_font_info, glyph.idx, m_bake_scale, m_bake_scale, &x0, &y0, &x1, &y1);
@@ -55,7 +55,7 @@ namespace animgui {
                                   m_bake_scale, m_bake_scale, glyph.idx);
             return image_uploader(image);
         }
-        [[nodiscard]] float calculate_advance(const glyph glyph, const animgui::glyph prev) const override {
+        [[nodiscard]] float calculate_advance(const glyph_id glyph, const glyph_id prev) const override {
             int advance_width, left_side_bearing;
             stbtt_GetGlyphHMetrics(&m_font_info, glyph.idx, &advance_width, &left_side_bearing);
             const auto base = static_cast<float>(advance_width) * m_render_scale;
@@ -66,10 +66,10 @@ namespace animgui {
         [[nodiscard]] float line_spacing() const noexcept override {
             return m_line_spacing;
         }
-        [[nodiscard]] glyph to_glyph(const uint32_t codepoint) const override {
-            return glyph{ static_cast<uint32_t>(stbtt_FindGlyphIndex(&m_font_info, codepoint)) };
+        [[nodiscard]] glyph_id to_glyph(const uint32_t codepoint) const override {
+            return glyph_id{ static_cast<uint32_t>(stbtt_FindGlyphIndex(&m_font_info, codepoint)) };
         }
-        [[nodiscard]] bounds_aabb calculate_bounds(const glyph glyph) const override {
+        [[nodiscard]] bounds_aabb calculate_bounds(const glyph_id glyph) const override {
             int x0, y0, x1, y1;
             stbtt_GetGlyphBox(&m_font_info, glyph.idx, &x0, &y0, &x1, &y1);
             return bounds_aabb{ static_cast<float>(x0) * m_render_scale, static_cast<float>(x1) * m_render_scale,

@@ -58,11 +58,11 @@ namespace animgui {
         }
 
     public:
-        explicit compacted_image(std::shared_ptr<texture> texture, std::pmr::memory_resource* memory_resource)
-            : m_texture{ std::move(texture) }, m_memory_resource{ memory_resource } {
+        explicit compacted_image(std::shared_ptr<texture> tex, std::pmr::memory_resource* memory_resource)
+            : m_texture{ std::move(tex) }, m_memory_resource{ memory_resource } {
             create_new_column(0);
         }
-        [[nodiscard]] std::shared_ptr<texture> texture() const {
+        [[nodiscard]] std::shared_ptr<texture> texture_ref() const {
             return m_texture;
         }
         std::optional<bounds_aabb> allocate(const image_desc& image, const float max_scale) {
@@ -147,13 +147,13 @@ namespace animgui {
             auto& images = m_images[static_cast<uint32_t>(image.channels)];
             for(auto&& pool : images) {
                 if(auto bounds = pool.allocate(image, max_scale)) {
-                    return { pool.texture(), bounds.value() };
+                    return { pool.texture_ref(), bounds.value() };
                 }
             }
             images.emplace_back(m_backend.create_texture({ image_pool_size, image_pool_size }, image.channels),
                                 m_memory_resource);
             auto&& pool = images.back();
-            return { pool.texture(), pool.allocate(image, max_scale).value() };
+            return { pool.texture_ref(), pool.allocate(image, max_scale).value() };
         }
     };
 

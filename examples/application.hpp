@@ -16,7 +16,7 @@ namespace animgui {
         application& operator=(const application& rhs) = delete;
         application& operator=(application&& rhs) = delete;
 
-        virtual void render(canvas& canvas) = 0;
+        virtual void render(canvas& canvas_root) = 0;
     };
 
     std::shared_ptr<application> create_demo_application(context& context);

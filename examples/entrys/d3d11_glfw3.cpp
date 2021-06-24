@@ -119,9 +119,12 @@ int main() {
             const auto delta_t = static_cast<float>(current - last);
             last = current;
 
-            ctx->new_frame(w, h, delta_t, [&](animgui::canvas& canvas) { app->render(canvas); });
+            int window_w, window_h;
+            glfwGetWindowSize(window, &window_w, &window_h);
 
-            D3D11_VIEWPORT viewport{ 0, 0, static_cast<float>(w), static_cast<float>(h) };
+            ctx->new_frame(window_w, window_h, delta_t, [&](animgui::canvas& canvas_root) { app->render(canvas_root); });
+
+            D3D11_VIEWPORT viewport{ 0.0f, 0.0f, static_cast<float>(w), static_cast<float>(h), 0.0f, 0.0f };
             device_context->RSSetViewports(1, &viewport);
             const D3D11_RECT clip_rect{ 0, 0, w, h };
             device_context->RSSetScissorRects(1, &clip_rect);

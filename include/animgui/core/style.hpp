@@ -8,7 +8,7 @@ namespace animgui {
     class font;
 
     struct style {
-        std::shared_ptr<font> font;
+        std::shared_ptr<font> default_font;
 
         color_rgba panel_background_color;
         color_rgba background_color;

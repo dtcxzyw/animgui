@@ -128,10 +128,11 @@ namespace animgui {
 
     class render_backend_impl final : public render_backend {
         std::pmr::vector<command> m_command_list;
-        unsigned int m_program_id;
-        unsigned int m_vbo;
-        unsigned int m_vao;
+        GLuint m_program_id;
+        GLuint m_vbo;
+        GLuint m_vao;
         texture_impl m_empty;
+        vec2 m_window_size;
 
         static void check_compile_errors(const GLuint shader, const std::string_view type) {
             GLint success;
@@ -175,7 +176,7 @@ namespace animgui {
         }
 
         void emit(const primitives& primitives, const bounds_aabb&, const vec2 size) {
-            auto&& [type, vertices, texture, point_line_size] = primitives;
+            auto&& [type, vertices, tex, point_line_size] = primitives;
             glEnable(GL_BLEND);
             glDisable(GL_DEPTH_TEST);
             glDisable(GL_CULL_FACE);
@@ -192,15 +193,15 @@ namespace animgui {
             glBindVertexArray(m_vao);
             glActiveTexture(GL_TEXTURE0);
 
-            auto tex = texture ? texture.get() : &m_empty;
-            tex->generate_mipmap();
-            glBindTexture(GL_TEXTURE_2D, static_cast<GLuint>(tex->native_handle()));
+            auto cmd_tex = tex ? tex.get() : &m_empty;
+            cmd_tex->generate_mipmap();
+            glBindTexture(GL_TEXTURE_2D, static_cast<GLuint>(cmd_tex->native_handle()));
 
             glDrawArrays(get_mode(type), 0, static_cast<uint32_t>(vertices.size()));
         }
 
     public:
-        render_backend_impl() : m_vbo{ 0 }, m_vao{ 0 }, m_empty{ channel::rgba, uvec2{ 1, 1 } } {
+        render_backend_impl() : m_vbo{ 0 }, m_vao{ 0 }, m_empty{ channel::rgba, uvec2{ 1, 1 } }, m_window_size{ 0.0f, 0.0f } {
             const unsigned int shader_vert = glCreateShader(GL_VERTEX_SHADER);
             glShaderSource(shader_vert, 1, &shader_vert_src, nullptr);
             glCompileShader(shader_vert);
@@ -235,7 +236,7 @@ namespace animgui {
             glBindVertexArray(0);
 
             uint8_t data[4] = { 255, 255, 255, 255 };
-            m_empty.update_texture(uvec2{ 0, 0 }, animgui::image_desc{ { 1, 1 }, channel::rgba, data });
+            m_empty.update_texture(uvec2{ 0, 0 }, image_desc{ { 1, 1 }, channel::rgba, data });
         }
         explicit render_backend_impl(const render_backend_impl&) = delete;
         explicit render_backend_impl(render_backend_impl&&) = delete;
@@ -247,7 +248,8 @@ namespace animgui {
             glDeleteBuffers(1, &m_vbo);
         }
 
-        void update_command_list(std::pmr::vector<command> command_list) override {
+        void update_command_list(const uvec2 window_size, std::pmr::vector<command> command_list) override {
+            m_window_size = { static_cast<float>(window_size.x), static_cast<float>(window_size.y) };
             m_command_list = std::move(command_list);
         }
 
@@ -272,11 +274,7 @@ namespace animgui {
                 const int top = static_cast<int>(std::floor(clip.top));
 
                 glScissor(left, screen_size.y - bottom, right - left, bottom - top);
-                std::visit(
-                    [&](auto&& item) {
-                        emit(item, clip, vec2{ static_cast<float>(screen_size.x), static_cast<float>(screen_size.y) });
-                    },
-                    command.desc);
+                std::visit([&](auto&& item) { emit(item, clip, m_window_size); }, command.desc);
             }
         }
         [[nodiscard]] primitive_type supported_primitives() const noexcept override {
