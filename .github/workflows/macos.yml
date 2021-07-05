@@ -8,13 +8,14 @@ on:
 
 env:
   BUILD_TYPE: Release
-  CMAKE_MAKE_PROGRAM: xcodebuild
-  CMAKE_C_COMPILER: gcc-11
-  CMAKE_CXX_COMPILER: g++-11
 
 jobs:
   build:
     runs-on: macos-latest
+    env:
+      CMAKE_MAKE_PROGRAM: xcodebuild
+      CMAKE_C_COMPILER: gcc-11
+      CMAKE_CXX_COMPILER: g++-11
 
     steps:
     - uses: actions/checkout@v2
