@@ -1,0 +1,19 @@
+name: docs
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Install Sphinx
+        run: pip install sphinx-rtd-theme
+
+      - name: Build Documentation
+        run: sphinx-build -M html ${{github.workspace}}/docs ${{github.workspace}}/docs/_build 
