@@ -43,11 +43,14 @@ Animgui
    :maxdepth: 1
    :caption: Animgui核心开发者文档
    
-   core/design
    core/pipeline
    core/context
    core/command_fallback
-   core/top_canvas
-   core/contrib_design
+
+.. toctree::
+   :maxdepth: 1
+   :caption: Animgui贡献规范
+
+   core/contrib_issue
    core/contrib_code
    core/contrib_docs

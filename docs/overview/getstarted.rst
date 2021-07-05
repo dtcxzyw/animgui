@@ -5,7 +5,7 @@
 -----------------------------------
 
 - 支持C++17的C++编译器(GCC 7+ 或MSVC 19.14+)
-- 支持OpenGL4.2或Direct3D 11
+- 支持OpenGL3.3或Direct3D 11
 - CMake 3.19+
 
 安装
@@ -88,7 +88,6 @@ clone并编译animgui
 
         glfwDefaultWindowHints();
         glfwWindowHint(GLFW_VISIBLE, GLFW_TRUE);
-        glfwWindowHint(GLFW_DECORATED, GLFW_FALSE);
         glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
         glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 5);
         glfwWindowHint(GLFW_DEPTH_BITS, GL_FALSE);
@@ -122,6 +121,7 @@ clone并编译animgui
             const auto emitter = animgui::create_builtin_emitter(memory_resource);
             const auto command_optimizer = animgui::create_builtin_command_optimizer();
             const auto image_compactor = animgui::create_builtin_image_compactor(*ogl3_backend, memory_resource);
+            // 根据选好的组件初始化上下文，此后用户仅需调用context和render_backend的方法
             auto ctx = animgui::create_animgui_context(*glfw3_backend, *ogl3_backend, *stb_font_backend, *emitter, *animator,
                                                     *command_optimizer, *image_compactor, memory_resource);
             const auto app = std::make_unique<demo>(*ctx);
@@ -156,6 +156,7 @@ clone并编译animgui
                 glfwSwapBuffers(window);
             };
 
+            // 主循环
             while(!glfwWindowShouldClose(window)) {
                 glfw3_backend->new_frame();
                 draw();
