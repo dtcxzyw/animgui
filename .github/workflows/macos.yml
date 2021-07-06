@@ -23,8 +23,8 @@ jobs:
 
     - name: Configure CMake
       run: |
-        export CC = gcc-11
-        export CXX = g++-11
+        export CC=gcc-11
+        export CXX=g++-11
         cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -DCMAKE_TOOLCHAIN_FILE=/usr/local/share/vcpkg/scripts/buildsystems/vcpkg.cmake
 
     - name: Build
