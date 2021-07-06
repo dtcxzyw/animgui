@@ -12,9 +12,6 @@ env:
 jobs:
   build:
     runs-on: macos-latest
-    env:
-      CC: gcc-11
-      CXX: g++-11
 
     steps:
     - uses: actions/checkout@v2
@@ -25,7 +22,10 @@ jobs:
         vcpkg integrate install
 
     - name: Configure CMake
-      run: cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -DCMAKE_TOOLCHAIN_FILE=/usr/local/share/vcpkg/scripts/buildsystems/vcpkg.cmake
+      run: |
+        export CC = gcc-11
+        export CXX = g++-11
+        cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -DCMAKE_TOOLCHAIN_FILE=/usr/local/share/vcpkg/scripts/buildsystems/vcpkg.cmake
 
     - name: Build
       run: cmake --build ${{github.workspace}}/build --config ${{env.BUILD_TYPE}}
