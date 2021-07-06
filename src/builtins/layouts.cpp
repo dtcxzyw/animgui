@@ -4,8 +4,8 @@
 #include <animgui/builtins/widgets.hpp>
 #include <animgui/core/input_backend.hpp>
 #include <animgui/core/style.hpp>
-#include <string>
 #include <cmath>
+#include <string>
 
 namespace animgui {
     std::pmr::memory_resource* layout_proxy::memory_resource() const noexcept {
@@ -169,14 +169,67 @@ namespace animgui {
         return bounds;
     }
 
-    // TODO: scroll
-    ANIMGUI_API void panel(canvas& parent, const vec2 size, const std::function<void(canvas&)>& render_function) {
+    // TODO: force focus
+    ANIMGUI_API void panel(canvas& parent, const vec2 size, const scroll_attributes scroll,
+                           const std::function<vec2(canvas&)>& render_function) {
         const bounds_aabb bounds{ 0.0f, size.x, 0.0f, size.y };
-        parent.push_region(parent.region_sub_uid(), bounds);
+        const auto uid = parent.push_region(parent.region_sub_uid(), bounds).second;
+        auto& [offset_x, offset_y] = parent.storage<vec2>(uid);
+
+        parent.push_region("panel_content"_id, bounds_aabb{ offset_x, size.x, offset_y, size.y });
+        const auto [w, h] = render_function(parent);
+        parent.pop_region();
+
+        /*
         parent.add_primitive(
-            parent.region_sub_uid(),
+            "panel_bounds"_id,
             canvas_stroke_rect{ bounds, parent.global_style().highlight_color, parent.global_style().panel_bounds_edge_width });
-        render_function(parent);
+        */
+
+        auto&& style = parent.global_style();
+        const auto scroll_scale = 3.0f * style.default_font->height();  // TODO: read from system
+
+        if(const bounds_aabb horizontal_track{ 0.0f, size.x, size.y - style.padding.y, size.y }; w > size.x &&
+           (static_cast<uint32_t>(scroll) & static_cast<uint32_t>(scroll_attributes::horizontal_scroll)) &&
+           parent.hovered(horizontal_track)) {
+            parent.add_primitive("horizontal_track"_id, canvas_fill_rect{ horizontal_track, style.background_color });
+            const auto width = (size.x / w) * size.x;
+            const auto scroll_offset_x = (-offset_x / w) * size.x;
+
+            const bounds_aabb handle_bounds{ scroll_offset_x, scroll_offset_x + width, size.y - style.padding.y, size.y };
+            parent.push_region("horizontal_handle"_id, handle_bounds);
+            const auto handle_selected = selected(parent, mix(uid, "handle"_id));
+            if(handle_selected)
+                offset_x += parent.input().mouse_move().x / size.x * w;
+            offset_x += parent.input().scroll().x / size.x * w * scroll_scale;
+            parent.pop_region();
+
+            parent.add_primitive("handle"_id,
+                                 canvas_fill_rect{ handle_bounds, handle_selected ? style.selected_color : style.normal_color });
+        }
+
+        if(const bounds_aabb vertical_track{ size.x - style.spacing.x, size.x, 0.0f, size.y }; h > size.y &&
+           (static_cast<uint32_t>(scroll) & static_cast<uint32_t>(scroll_attributes::vertical_scroll)) &&
+           parent.hovered(vertical_track)) {
+            parent.add_primitive("vertical_track"_id, canvas_fill_rect{ vertical_track, style.background_color });
+            const auto height = (size.y / h) * size.y;
+            const auto scroll_offset_y = (-offset_y / h) * size.y;
+
+            const bounds_aabb handle_bounds{ size.x - style.spacing.x, size.x, scroll_offset_y, scroll_offset_y + height };
+            parent.push_region("vertical_handle"_id, handle_bounds);
+            const auto handle_selected = selected(parent, mix(uid, "handle"_id));
+            if(handle_selected)
+                offset_y += parent.input().mouse_move().y / size.y * h;
+            offset_y += parent.input().scroll().y / size.y * h * scroll_scale;
+            parent.pop_region();
+
+            parent.add_primitive("handle"_id,
+                                 canvas_fill_rect{ handle_bounds, handle_selected ? style.selected_color : style.normal_color });
+        }
+
+        offset_x = std::fmin(0.0f, std::fmax(size.x - w, offset_x));
+        offset_y = std::fmin(0.0f, std::fmax(size.y - h, offset_y));
+
         parent.pop_region();
     }
 
@@ -430,6 +483,21 @@ namespace animgui {
                     }
                     bounds.right = bounds.left + content_bounds.right - content_bounds.left;
                     bounds.bottom = bounds.top + content_bounds.bottom - content_bounds.top;
+                    const auto [padding_x, padding_y] = global_style().padding;
+                    bounds.left -= padding_x;
+                    bounds.right += padding_x;
+                    bounds.top -= padding_y;
+                    bounds.bottom += padding_y;
+                    if(bounds.right > size.x) {
+                        bounds.left -= bounds.right - size.x;
+                        bounds.right = size.x;
+                    }
+                    bounds.left = std::fmax(bounds.left, 0.0f);
+                    if(bounds.bottom > size.y) {
+                        bounds.top -= bounds.bottom - size.y;
+                        bounds.bottom = size.y;
+                    }
+                    bounds.top = std::fmax(bounds.top, 0.0f);
                     auto_adjust = false;
                 }
             }

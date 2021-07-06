@@ -77,61 +77,76 @@ namespace animgui {
                 [&](window_canvas& full) {
                     multiple_window(full, [&](multiple_window_canvas& manager) {
                         manager.new_window("base"_id, "Test", window_attributes::movable, [&](window_canvas& window) {
-                            layout_row_center(window, [&](row_layout_canvas& layout) {
-                                text(layout, "Hello World 你好 世界");
-                                layout.newline();
-                                const auto [x, y] = layout.input().get_cursor_pos();
-                                text(layout, std::pmr::string{ "X: " + std::to_string(x) + " Y: " + std::to_string(y) });
-                                layout.newline();
-                                text(layout, "Click: " + std::pmr::string{ std::to_string(m_count) });
-                                if(button_label(layout, "Add")) {
-                                    ++m_count;
-                                }
-                                layout.newline();
-                                text_edit(layout, 20.0f, m_text, "input");
-                                layout.newline();
-                                checkbox(layout, "checkbox", m_checkbox_state);
-                                layout.newline();
-                                using clock = std::chrono::high_resolution_clock;
-                                constexpr auto second = clock::period::den;
-                                progressbar(layout, 300.0f,
-                                            static_cast<float>(clock::now().time_since_epoch().count() % second) /
-                                                static_cast<float>(second),
-                                            std::nullopt);
-                                layout.newline();
-                                radio_button(layout, { "easy", "normal", "hard" }, m_index);
-                                layout.newline();
-                                text(layout, std::pmr::string{ "value: " + std::to_string(m_int_value) });
-                                slider(layout, 300.0f, 20.0f, m_int_value, 0, 10);
-                                layout.newline();
-                                text(layout, std::pmr::string{ "value: " + std::to_string(m_float_value) });
-                                slider(layout, 300.0f, 20.0f, m_float_value, 0.0f, 10.0f);
-                                layout.newline();
-                                text(layout, "switch");
-                                switch_(layout, m_switch_state);
-                                layout.newline();
-                                if(button_label(layout, "game pad")) {
-                                    manager.open_window("game_pad"_id);
-                                }
-                                layout.newline();
-                                if(button_label(layout, "Exit")) {
-                                    layout.input().close_window();
-                                }
-                            });
+                            panel(window, window.region_bounds().size(), scroll_attributes::vertical_scroll,
+                                  [&](canvas& panel_canvas) {
+                                      return layout_row(panel_canvas, row_alignment::middle, [&](row_layout_canvas& layout) {
+                                          text(layout, "Hello World 你好 世界");
+                                          layout.newline();
+
+                                          const auto [x, y] = layout.input().get_cursor_pos();
+                                          text(layout,
+                                               std::pmr::string{ "X: " + std::to_string(x) + " Y: " + std::to_string(y) });
+                                          layout.newline();
+                                          text(layout, "Click: " + std::pmr::string{ std::to_string(m_count) });
+                                          if(button_label(layout, "Add")) {
+                                              ++m_count;
+                                          }
+                                          layout.newline();
+                                          text_edit(layout, 20.0f, m_text, "input");
+                                          layout.newline();
+                                          checkbox(layout, "checkbox", m_checkbox_state);
+                                          layout.newline();
+                                          using clock = std::chrono::high_resolution_clock;
+                                          constexpr auto second = clock::period::den;
+                                          progressbar(layout, 300.0f,
+                                                      static_cast<float>(clock::now().time_since_epoch().count() % second) /
+                                                          static_cast<float>(second),
+                                                      std::nullopt);
+                                          layout.newline();
+                                          radio_button(layout, { "easy", "normal", "hard" }, m_index);
+                                          layout.newline();
+                                          text(layout, std::pmr::string{ "value: " + std::to_string(m_int_value) });
+                                          slider(layout, 300.0f, 20.0f, m_int_value, 0, 10);
+                                          layout.newline();
+                                          text(layout, std::pmr::string{ "value: " + std::to_string(m_float_value) });
+                                          slider(layout, 300.0f, 20.0f, m_float_value, 0.0f, 10.0f);
+                                          layout.newline();
+                                          text(layout, "switch");
+                                          switch_(layout, m_switch_state);
+                                          layout.newline();
+                                          if(button_label(layout, "game pad")) {
+                                              manager.open_window("game_pad"_id);
+                                          }
+                                          layout.newline();
+                                          if(button_label(layout, "Exit")) {
+                                              layout.input().close_window();
+                                          }
+
+                                          for(uint32_t i = 0; i < 50; ++i) {
+                                              layout.newline();
+                                              text(layout, std::pmr::string{ "scroll test " + std::to_string(i) });
+                                          }
+                                      });
+                                  });
                         });
+
                         manager.new_window("game_pad"_id, "Game Pad ", window_attributes::movable | window_attributes::closable,
                                            [&](window_canvas& window) {
-                                               layout_row_center(window, [&](row_layout_canvas& layout) {
-                                                   layout.newline();
+                                               panel(window, window.region_bounds().size(), scroll_attributes::vertical_scroll,
+                                                     [&](canvas& panel_canvas) {
+                                                         return layout_row(window, row_alignment::middle,
+                                                                           [&](row_layout_canvas& layout) {
+                                                                               layout.newline();
 
-                                                   for(auto i = 0; i < 5; ++i) {
-                                                       for(auto j = 0; j < 5; ++j)
-                                                           button_label(layout, "B");
-                                                       layout.newline();
-                                                   }
+                                                                               for(auto i = 0; i < 5; ++i) {
+                                                                                   for(auto j = 0; j < 5; ++j)
+                                                                                       button_label(layout, "B");
+                                                                                   layout.newline();
+                                                                               }
 
-                                                   test_game_pad(layout);
-                                               });
+                                                                               test_game_pad(layout);
+                                                                           });
+                                                     });
                                            });
                     });
                 });

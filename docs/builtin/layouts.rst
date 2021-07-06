@@ -45,3 +45,10 @@ UI布局
         // 根据id将对应窗口置于最顶端
         virtual void focus_window(identifier id) = 0;
     };
+
+    // 向当前画布添加一块可选滚动条的面板
+    // parent: 父画布
+    // size: 面板大小
+    // scroll: 滚动条属性，可选none/horizontal/vertical/both
+    // render_function: 布局下的UI绘制函数，请注意需要返回面板内元素的包围盒实际大小，以便于滚动条的计算
+    void panel(canvas& parent, vec2 size, scroll_attributes scroll, const std::function<vec2(canvas&)>& render_function);

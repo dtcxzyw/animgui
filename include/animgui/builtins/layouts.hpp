@@ -81,7 +81,15 @@ namespace animgui {
     ANIMGUI_API void multiple_window(canvas& parent, const std::function<void(multiple_window_canvas&)>& render_function);
     ANIMGUI_API void docking(canvas& parent, const std::function<void(multiple_window_canvas&)>& render_function);
 
-    ANIMGUI_API void panel(canvas& parent, vec2 size, const std::function<void(canvas&)>& render_function);
+    enum class scroll_attributes : uint32_t {
+        none = 0,
+        vertical_scroll = 1,
+        horizontal_scroll = 2,
+        both = vertical_scroll | horizontal_scroll
+    };
+
+    ANIMGUI_API void panel(canvas& parent, vec2 size, scroll_attributes scroll,
+                           const std::function<vec2(canvas&)>& render_function);
 
     class tab_canvas : public layout_proxy {
     public:
