@@ -18,6 +18,7 @@ jobs:
     
     - name: Install Dependencies
       run: |
+        sudo apt-get install libxmu-dev libxi-dev libgl-dev
         vcpkg install glew:x64-linux glfw3:x64-linux utfcpp:x64-linux stb:x64-linux opengl:x64-linux
         vcpkg integrate install
 
