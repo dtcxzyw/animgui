@@ -187,44 +187,68 @@ namespace animgui {
         */
 
         auto&& style = parent.global_style();
+        auto&& input = parent.input();
         const auto scroll_scale = 3.0f * style.default_font->height();  // TODO: read from system
 
-        if(const bounds_aabb horizontal_track{ 0.0f, size.x, size.y - style.padding.y, size.y }; w > size.x &&
-           (static_cast<uint32_t>(scroll) & static_cast<uint32_t>(scroll_attributes::horizontal_scroll)) &&
-           parent.hovered(horizontal_track)) {
-            parent.add_primitive("horizontal_track"_id, canvas_fill_rect{ horizontal_track, style.background_color });
-            const auto width = (size.x / w) * size.x;
-            const auto scroll_offset_x = (-offset_x / w) * size.x;
+        auto& [scrolling_x, scrolling_y] = parent.storage<std::pair<bool, bool>>(mix(uid, "scrolling"_id));
 
-            const bounds_aabb handle_bounds{ scroll_offset_x, scroll_offset_x + width, size.y - style.padding.y, size.y };
-            parent.push_region("horizontal_handle"_id, handle_bounds);
-            const auto handle_selected = selected(parent, mix(uid, "handle"_id));
-            if(handle_selected)
-                offset_x += parent.input().mouse_move().x / size.x * w;
-            offset_x += parent.input().scroll().x / size.x * w * scroll_scale;
+        // TODO: improve scrolling experience
+        if(w > size.x && (static_cast<uint32_t>(scroll) & static_cast<uint32_t>(scroll_attributes::horizontal_scroll))) {
+            parent.push_region("horizontal_scroll"_id, bounds_aabb{ 0.0f, size.x, size.y - style.padding.y, size.y });
+            if(parent.region_hovered() || scrolling_x) {
+                scrolling_x = false;
+                parent.add_primitive(
+                    "horizontal_track"_id,
+                    canvas_fill_rect{ bounds_aabb{ 0.0f, size.x, 0.0f, style.padding.y }, style.background_color });
+                const auto width = (size.x / w) * size.x;
+                const auto scroll_offset_x = (-offset_x / w) * size.x;
+
+                const bounds_aabb handle_bounds{ scroll_offset_x, scroll_offset_x + width, 0.0f, style.padding.y };
+                parent.push_region("horizontal_handle"_id, handle_bounds);
+                const auto handle_selected = selected(parent, mix(uid, "handle"_id));
+                if(handle_selected) {
+                    offset_x -= input.mouse_move().x / size.x * w;
+                    scrolling_x = true;
+                }
+                if(std::fabs(input.scroll().x) > 1e-3f) {
+                    offset_x += input.scroll().x / size.x * w * scroll_scale;
+                    scrolling_x = true;
+                }
+                parent.pop_region();
+
+                parent.add_primitive(
+                    "handle"_id, canvas_fill_rect{ handle_bounds, handle_selected ? style.highlight_color : style.normal_color });
+            }
             parent.pop_region();
-
-            parent.add_primitive("handle"_id,
-                                 canvas_fill_rect{ handle_bounds, handle_selected ? style.selected_color : style.normal_color });
         }
 
-        if(const bounds_aabb vertical_track{ size.x - style.spacing.x, size.x, 0.0f, size.y }; h > size.y &&
-           (static_cast<uint32_t>(scroll) & static_cast<uint32_t>(scroll_attributes::vertical_scroll)) &&
-           parent.hovered(vertical_track)) {
-            parent.add_primitive("vertical_track"_id, canvas_fill_rect{ vertical_track, style.background_color });
-            const auto height = (size.y / h) * size.y;
-            const auto scroll_offset_y = (-offset_y / h) * size.y;
+        if(h > size.y && (static_cast<uint32_t>(scroll) & static_cast<uint32_t>(scroll_attributes::vertical_scroll))) {
+            parent.push_region("vertical_scroll"_id, bounds_aabb{ size.x - style.spacing.x, size.x, 0.0f, size.y });
+            if(parent.region_hovered() || scrolling_y) {
+                scrolling_y = false;
+                parent.add_primitive(
+                    "vertical_track"_id,
+                    canvas_fill_rect{ bounds_aabb{ 0.0f, style.spacing.x, 0.0f, size.y }, style.background_color });
+                const auto height = (size.y / h) * size.y;
+                const auto scroll_offset_y = (-offset_y / h) * size.y;
 
-            const bounds_aabb handle_bounds{ size.x - style.spacing.x, size.x, scroll_offset_y, scroll_offset_y + height };
-            parent.push_region("vertical_handle"_id, handle_bounds);
-            const auto handle_selected = selected(parent, mix(uid, "handle"_id));
-            if(handle_selected)
-                offset_y += parent.input().mouse_move().y / size.y * h;
-            offset_y += parent.input().scroll().y / size.y * h * scroll_scale;
+                const bounds_aabb handle_bounds{ 0.0f, style.spacing.x, scroll_offset_y, scroll_offset_y + height };
+                parent.push_region("vertical_handle"_id, handle_bounds);
+                const auto handle_selected = selected(parent, mix(uid, "handle"_id));
+                if(handle_selected) {
+                    offset_y -= input.mouse_move().y / size.y * h;
+                    scrolling_y = true;
+                }
+                if(std::fabs(input.scroll().y) > 1e-3f) {
+                    offset_y += input.scroll().y / size.y * h * scroll_scale;
+                    scrolling_y = true;
+                }
+                parent.pop_region();
+
+                parent.add_primitive(
+                    "handle"_id, canvas_fill_rect{ handle_bounds, handle_selected ? style.highlight_color : style.normal_color });
+            }
             parent.pop_region();
-
-            parent.add_primitive("handle"_id,
-                                 canvas_fill_rect{ handle_bounds, handle_selected ? style.selected_color : style.normal_color });
         }
 
         offset_x = std::fmin(0.0f, std::fmax(size.x - w, offset_x));
