@@ -7,8 +7,8 @@
 #include <animgui/core/input_backend.hpp>
 #include <animgui/core/style.hpp>
 #include <cassert>
-#include <utf8.h>
 #include <cmath>
+#include <utf8.h>
 
 namespace animgui {
     ANIMGUI_API void text(canvas& parent, std::pmr::string str) {
@@ -444,12 +444,14 @@ namespace animgui {
 
         parent.pop_region();
     }
-    ANIMGUI_API void slider(canvas& parent, const float width, const float handle_width, int32_t& val, const int32_t min,
+    ANIMGUI_API void slider(canvas& parent, const float width, const float min_handle_width, int32_t& val, const int32_t min,
                             const int32_t max) {
-        slider_impl(parent, width, handle_width, val, min, max);
+        assert(max != min);
+        slider_impl(parent, width, std::fmax(width / static_cast<float>(max - min + 1), min_handle_width), val, min, max);
     }
     ANIMGUI_API void slider(canvas& parent, const float width, const float handle_width, float& val, const float min,
                             const float max) {
+        assert(std::fabs(max - min) > 1e-8f);
         slider_impl(parent, width, handle_width, val, min, max);
     }
     ANIMGUI_API void switch_(canvas& parent, bool& state) {

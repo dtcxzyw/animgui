@@ -15,7 +15,7 @@ namespace animgui {
     ANIMGUI_API bool button_image(canvas& parent, texture_region image, vec2 size, const color_rgba& factor);
     ANIMGUI_API void property(canvas& parent, int32_t& val, int32_t min, int32_t max, int32_t step, float smooth_step);
     ANIMGUI_API void property(canvas& parent, float& val, float min, float max, float step, float smooth_step);
-    ANIMGUI_API void slider(canvas& parent, float width, float handle_width, int32_t& val, int32_t min, int32_t max);
+    ANIMGUI_API void slider(canvas& parent, float width, float min_handle_width, int32_t& val, int32_t min, int32_t max);
     ANIMGUI_API void slider(canvas& parent, float width, float handle_width, float& val, float min, float max);
     ANIMGUI_API void checkbox(canvas& parent, std::pmr::string label, bool& state);
     ANIMGUI_API void switch_(canvas& parent, bool& state);

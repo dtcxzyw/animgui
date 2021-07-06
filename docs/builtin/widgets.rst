@@ -32,11 +32,11 @@ UI组件
     // 整数滑动条
     // parent: 画布
     // width: 滑动条宽度
-    // handle_width: 滑动条把手宽度
+    // min_handle_width: 最小滑动条把手宽度，animgui使用width、min和max自动计算handle_width，并与min_handle_width取最大值
     // val: 当前值
     // min: 最小值
     // max: 最大值
-    void slider(canvas& parent, float width, float handle_width, int32_t& val, int32_t min, int32_t max);
+    void slider(canvas& parent, float width, float min_handle_width, int32_t& val, int32_t min, int32_t max);
     
     // 浮点滑动条
     // parent: 画布
