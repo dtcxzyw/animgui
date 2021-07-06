@@ -5,6 +5,7 @@
 #include <animgui/core/input_backend.hpp>
 #include <animgui/core/style.hpp>
 #include <string>
+#include <cmath>
 
 namespace animgui {
     std::pmr::memory_resource* layout_proxy::memory_resource() const noexcept {
@@ -82,14 +83,14 @@ namespace animgui {
             auto max_height = 0.0f;
             auto width_sum = 0.0f;
             for(auto&& [id, idx, size] : m_current_line) {
-                max_height = std::fmaxf(max_height, size.y);
+                max_height = std::fmax(max_height, size.y);
                 width_sum += size.x;
             }
             const auto width = reserved_size().x;
             if(!m_current_line.empty()) {
                 const auto total_width =
                     width_sum + std::fmax(0.0f, static_cast<float>(m_current_line.size()) - 1.0f) * global_style().spacing.x;
-                m_max_total_width = std::fmaxf(m_max_total_width, total_width);
+                m_max_total_width = std::fmax(m_max_total_width, total_width);
                 auto alignment = m_alignment;
                 if(alignment == row_alignment::justify && (m_current_line.size() == 1 || width < width_sum))
                     alignment = row_alignment::middle;
@@ -107,7 +108,7 @@ namespace animgui {
                     } break;
                     case row_alignment::justify: {
                         spacing = (width - width_sum) / (static_cast<float>(m_current_line.size()) - 1);
-                        m_max_total_width = std::fmaxf(m_max_total_width, width);
+                        m_max_total_width = std::fmax(m_max_total_width, width);
                     } break;
                 }
 

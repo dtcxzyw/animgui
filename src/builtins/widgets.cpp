@@ -8,6 +8,7 @@
 #include <animgui/core/style.hpp>
 #include <cassert>
 #include <utf8.h>
+#include <cmath>
 
 namespace animgui {
     ANIMGUI_API void text(canvas& parent, std::pmr::string str) {

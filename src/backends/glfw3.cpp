@@ -4,6 +4,7 @@
 #include <animgui/backends/glfw3.hpp>
 #include <animgui/core/input_backend.hpp>
 #include <cstring>
+#include <cmath>
 
 namespace animgui {
     static key_code cast_key_code(int code) {

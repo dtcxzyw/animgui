@@ -104,10 +104,10 @@ namespace animgui {
         }
         static void emit(const canvas_line& item, const bounds_aabb& clip_rect, const vec2 offset,
                          std::pmr::vector<command>& commands, const style&, const std::function<texture_region(font&, glyph_id)>&) {
-            if(auto rect = bounds_aabb{ std::fminf(item.start.x, item.end.x) - item.size / 2.0f,
-                                        std::fmaxf(item.start.x, item.end.x) + item.size / 2.0f,
-                                        std::fminf(item.start.y, item.end.y) - item.size / 2.0f,
-                                        std::fmaxf(item.start.y, item.end.y) + item.size / 2.0f };
+            if(auto rect = bounds_aabb{ std::fmin(item.start.x, item.end.x) - item.size / 2.0f,
+                                        std::fmax(item.start.x, item.end.x) + item.size / 2.0f,
+                                        std::fmin(item.start.y, item.end.y) - item.size / 2.0f,
+                                        std::fmax(item.start.y, item.end.y) + item.size / 2.0f };
                !clip_bounds(rect, offset, clip_rect))
                 return;
             const auto p0 = vec2{ offset.x + item.start.x, offset.y + item.start.y },

@@ -15,6 +15,7 @@
 #include <random>
 #include <set>
 #include <stack>
+#include <cmath>
 
 namespace animgui {
     class state_manager final {
