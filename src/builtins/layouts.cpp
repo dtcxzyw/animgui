@@ -263,13 +263,15 @@ namespace animgui {
 
         const auto scroll_scale = 3.0f * style.default_font->height();  // TODO: read from system
 
-        if(std::fabs(input.scroll().x) > 1e-3f) {
-            offset_x += input.scroll().x / size.x * w * scroll_scale;
-            scrolling_x = scrolling_delay;
-        }
-        if(std::fabs(input.scroll().y) > 1e-3f) {
-            offset_y += input.scroll().y / size.y * h * scroll_scale;
-            scrolling_y = scrolling_delay;
+        if(parent.region_hovered()) {
+            if(std::fabs(input.scroll().x) > 1e-3f) {
+                offset_x += input.scroll().x / size.x * w * scroll_scale;
+                scrolling_x = scrolling_delay;
+            }
+            if(std::fabs(input.scroll().y) > 1e-3f) {
+                offset_y += input.scroll().y / size.y * h * scroll_scale;
+                scrolling_y = scrolling_delay;
+            }
         }
 
         offset_x = std::fmin(0.0f, std::fmax(size.x - w, offset_x));
