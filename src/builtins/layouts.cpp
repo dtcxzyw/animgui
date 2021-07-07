@@ -192,7 +192,6 @@ namespace animgui {
 
         auto& [scrolling_x, scrolling_y] = parent.storage<std::pair<bool, bool>>(mix(uid, "scrolling"_id));
 
-        // TODO: improve scrolling experience
         if(w > size.x && (static_cast<uint32_t>(scroll) & static_cast<uint32_t>(scroll_attributes::horizontal_scroll))) {
             parent.push_region("horizontal_scroll"_id, bounds_aabb{ 0.0f, size.x, size.y - style.padding.y, size.y });
             if(parent.region_hovered() || scrolling_x) {
@@ -205,7 +204,7 @@ namespace animgui {
 
                 const bounds_aabb handle_bounds{ scroll_offset_x, scroll_offset_x + width, 0.0f, style.padding.y };
                 parent.push_region("horizontal_handle"_id, handle_bounds);
-                const auto handle_selected = selected(parent, mix(uid, "handle"_id));
+                const auto handle_selected = selected(parent, mix(uid, "horizontal_handle_selected"_id));
                 if(handle_selected) {
                     offset_x -= input.mouse_move().x / size.x * w;
                     scrolling_x = true;
@@ -215,6 +214,12 @@ namespace animgui {
                     scrolling_x = true;
                 }
                 parent.pop_region();
+
+                if(selected(parent, mix(uid, "horizontal_track_selected"_id)) && !handle_selected) {
+                    scrolling_x = true;
+                    const auto next_scroll_offset_x = input.get_cursor_pos().x - parent.region_offset().x - width * 0.5f;
+                    offset_x = -next_scroll_offset_x / size.x * w;
+                }
 
                 parent.add_primitive(
                     "handle"_id, canvas_fill_rect{ handle_bounds, handle_selected ? style.highlight_color : style.normal_color });
@@ -226,6 +231,7 @@ namespace animgui {
             parent.push_region("vertical_scroll"_id, bounds_aabb{ size.x - style.spacing.x, size.x, 0.0f, size.y });
             if(parent.region_hovered() || scrolling_y) {
                 scrolling_y = false;
+
                 parent.add_primitive(
                     "vertical_track"_id,
                     canvas_fill_rect{ bounds_aabb{ 0.0f, style.spacing.x, 0.0f, size.y }, style.background_color });
@@ -234,7 +240,7 @@ namespace animgui {
 
                 const bounds_aabb handle_bounds{ 0.0f, style.spacing.x, scroll_offset_y, scroll_offset_y + height };
                 parent.push_region("vertical_handle"_id, handle_bounds);
-                const auto handle_selected = selected(parent, mix(uid, "handle"_id));
+                const auto handle_selected = selected(parent, mix(uid, "vertical_handle_selected"_id));
                 if(handle_selected) {
                     offset_y -= input.mouse_move().y / size.y * h;
                     scrolling_y = true;
@@ -244,6 +250,12 @@ namespace animgui {
                     scrolling_y = true;
                 }
                 parent.pop_region();
+
+                if(selected(parent, mix(uid, "vertical_track_selected"_id)) && !handle_selected) {
+                    scrolling_y = true;
+                    const auto next_scroll_offset_y = input.get_cursor_pos().y - parent.region_offset().y - height * 0.5f;
+                    offset_y = -next_scroll_offset_y / size.y * h;
+                }
 
                 parent.add_primitive(
                     "handle"_id, canvas_fill_rect{ handle_bounds, handle_selected ? style.highlight_color : style.normal_color });
