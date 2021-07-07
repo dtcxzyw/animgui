@@ -54,7 +54,7 @@ namespace animgui {
         float panel_bounds_edge_width;
     };
 
-    constexpr color_rgba operator""_html_rgb(const uint64_t code) {
+    constexpr color_rgba operator""_html_rgb(const unsigned long long int code) {
         return color_rgba{ static_cast<float>((code >> 16) & 255) / 255.0f, static_cast<float>((code >> 8) & 255) / 255.0f,
                            static_cast<float>(code & 255) / 255.0f, 1.0f };
     }
