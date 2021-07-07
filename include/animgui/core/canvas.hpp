@@ -23,7 +23,8 @@ namespace animgui {
         [[nodiscard]] virtual vec2 calculate_bounds(const primitive& primitive) const = 0;
         [[nodiscard]] virtual identifier region_sub_uid() = 0;
 
-        virtual std::pair<size_t, identifier> push_region(identifier uid, const std::optional<bounds_aabb>& reserved_bounds = std::nullopt) = 0;
+        virtual std::pair<size_t, identifier> push_region(identifier uid,
+                                                          const std::optional<bounds_aabb>& reserved_bounds = std::nullopt) = 0;
         virtual void pop_region(const std::optional<bounds_aabb>& new_bounds = std::nullopt) = 0;
         virtual std::pair<size_t, identifier> add_primitive(identifier uid, primitive primitive) = 0;
         [[nodiscard]] virtual vec2 reserved_size() const noexcept = 0;
@@ -44,6 +45,7 @@ namespace animgui {
         [[nodiscard]] virtual const style& global_style() const noexcept = 0;
         [[nodiscard]] virtual std::pmr::memory_resource* memory_resource() const noexcept = 0;
         [[nodiscard]] virtual input_backend& input() const noexcept = 0;
+        [[nodiscard]] virtual float delta_t() const noexcept = 0;
 
         // TODO: convex polygon/SDF bounds
         [[nodiscard]] virtual const bounds_aabb& region_bounds() const = 0;

@@ -9,13 +9,13 @@
 #include <animgui/core/image_compactor.hpp>
 #include <animgui/core/input_backend.hpp>
 #include <animgui/core/style.hpp>
+#include <cmath>
 #include <cstring>
 #include <list>
 #include <optional>
 #include <random>
 #include <set>
 #include <stack>
-#include <cmath>
 
 namespace animgui {
     class state_manager final {
@@ -121,6 +121,7 @@ namespace animgui {
     class canvas_impl final : public canvas {
         context& m_context;
         vec2 m_size;
+        float m_delta_t;
         input_backend& m_input_backend;
         step_function m_step_function;
         emitter& m_emitter;
@@ -133,12 +134,13 @@ namespace animgui {
         std::pmr::vector<std::pair<identifier, vec2>> m_focusable_region;
 
     public:
-        canvas_impl(context& context, const vec2 size, input_backend& input, animator& animator, const float delta_t,
+        canvas_impl(context& context, const vec2 size, const float delta_t, input_backend& input, animator& animator,
                     emitter& emitter, state_manager& state_manager, std::pmr::memory_resource* memory_resource)
-            : m_context{ context }, m_size{ size }, m_input_backend{ input }, m_step_function{ animator.step(delta_t) },
-              m_emitter{ emitter }, m_state_manager{ state_manager }, m_memory_resource{ memory_resource },
-              m_input_mode{ m_input_backend.get_input_mode() }, m_commands{ m_memory_resource },
-              m_region_stack{ m_memory_resource }, m_animation_state_hash{ 0 }, m_focusable_region{ memory_resource } {
+            : m_context{ context }, m_size{ size }, m_delta_t{ delta_t }, m_input_backend{ input },
+              m_step_function{ animator.step(delta_t) }, m_emitter{ emitter }, m_state_manager{ state_manager },
+              m_memory_resource{ memory_resource }, m_input_mode{ m_input_backend.get_input_mode() },
+              m_commands{ m_memory_resource }, m_region_stack{ m_memory_resource }, m_animation_state_hash{ 0 },
+              m_focusable_region{ memory_resource } {
             const auto [hash, state_size, alignment] = animator.state_storage();
             m_animation_state_hash = hash;
             m_state_manager.register_type(
@@ -227,6 +229,9 @@ namespace animgui {
         }
         [[nodiscard]] input_backend& input() const noexcept override {
             return m_input_backend;
+        }
+        [[nodiscard]] float delta_t() const noexcept override {
+            return m_delta_t;
         }
         bool region_request_focus(const bool force) override {
             if(m_input_mode != input_mode::game_pad)
@@ -521,8 +526,8 @@ namespace animgui {
             std::pmr::monotonic_buffer_resource arena{ 1 << 15, m_memory_resource };
 
             canvas_impl canvas_root{ *this,           vec2{ static_cast<float>(width), static_cast<float>(height) },
-                                     m_input_backend, m_animator,
-                                     delta_t,         m_emitter,
+                                     delta_t,         m_input_backend,
+                                     m_animator,      m_emitter,
                                      m_state_manager, &arena };
             render_function(canvas_root);
             canvas_root.finish();

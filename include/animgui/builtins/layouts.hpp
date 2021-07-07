@@ -31,6 +31,7 @@ namespace animgui {
         [[nodiscard]] input_backend& input() const noexcept override;
         bool region_request_focus(bool force) override;
         [[nodiscard]] vec2 region_offset() const final;
+        [[nodiscard]] float delta_t() const noexcept final;
     };
 
     // TODO: indent/separate

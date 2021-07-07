@@ -13,7 +13,7 @@
 namespace animgui {
     ANIMGUI_API void text(canvas& parent, std::pmr::string str) {
         primitive text = canvas_text{ vec2{ 0.0f, 0.0f }, std::move(str), parent.global_style().default_font,
-                                      parent.global_style().font_color };
+                                      parent.global_style().text.primary };
         const auto [w, h] = parent.calculate_bounds(text);
         parent.push_region(parent.region_sub_uid(), bounds_aabb{ 0.0f, w, 0.0f, h });
         parent.add_primitive("content"_id, std::move(text));
@@ -243,7 +243,7 @@ namespace animgui {
 
         parent.add_primitive(
             "background"_id,
-            canvas_stroke_rect{ full_bounds, active ? style.highlight_color : style.normal_color, style.bounds_edge_width });
+            canvas_stroke_rect{ full_bounds, active ? style.action.active : style.action.disabled, style.bounds_edge_width });
         if(edit) {
             float start_pos = style.padding.x + offset;
             float end_pos = style.padding.x + offset;
@@ -287,19 +287,19 @@ namespace animgui {
                         parent.add_primitive("cursor"_id,
                                              canvas_fill_rect{ bounds_aabb{ start_pos, end_pos, style.padding.y,
                                                                             style.padding.y + style.default_font->height() },
-                                                               style.highlight_color });
+                                                               style.action.hover });
                     } else
                         parent.add_primitive("cursor"_id,
                                              canvas_line{ { start_pos, style.padding.y },
                                                           { start_pos, style.padding.y + style.default_font->height() },
-                                                          style.highlight_color,
+                                                          style.action.hover,
                                                           style.bounds_edge_width });
                 }
             } else {
                 parent.add_primitive("selected_background"_id,
                                      canvas_fill_rect{ bounds_aabb{ start_pos, end_pos, style.padding.y,
                                                                     style.padding.y + style.default_font->height() },
-                                                       style.selected_color });
+                                                       style.action.selected });
             }
         }
 
@@ -310,7 +310,7 @@ namespace animgui {
         parent.add_primitive(
             "content"_id,
             canvas_text{
-                { offset, 0.0f }, std::move(text), style.default_font, str.empty() ? style.disabled_color : style.font_color });
+                { offset, 0.0f }, std::move(text), style.default_font, str.empty() ? style.text.disabled : style.text.primary });
         parent.pop_region();
 
         parent.pop_region();
@@ -329,18 +329,18 @@ namespace animgui {
         parent.push_region("box"_id, box);
         parent.add_primitive("bounds"_id,
                              canvas_stroke_rect{ { 0.0f, size, 0.0f, size },
-                                                 focused ? style.highlight_color : style.normal_color,
+                                                 focused ? style.action.hover : style.action.active,
                                                  style.bounds_edge_width });
 
         if(state) {
             const auto quarter = size * 0.15f;
             parent.add_primitive("selected"_id,
-                                 canvas_fill_rect{ { quarter, size - quarter, quarter, size - quarter }, style.highlight_color });
+                                 canvas_fill_rect{ { quarter, size - quarter, quarter, size - quarter }, style.action.hover });
         }
         parent.pop_region();
 
         primitive text = canvas_text{
-            { size + 2.0f * style.padding.x, style.padding.y }, std::move(label), style.default_font, style.font_color
+            { size + 2.0f * style.padding.x, style.padding.y }, std::move(label), style.default_font, style.text.primary
         };
         const auto [w, h] = parent.calculate_bounds(text);
         parent.add_primitive("label"_id, std::move(text));
@@ -350,14 +350,14 @@ namespace animgui {
         auto&& style = parent.global_style();
         const bounds_aabb box{ 0.0f, width, 0.0f, 2.0f * style.padding.y + style.default_font->height() };
         parent.push_region(mix(parent.region_sub_uid(), "bounds"_id), box);
-        parent.add_primitive("base"_id, canvas_fill_rect{ box, style.highlight_color });
+        parent.add_primitive("base"_id, canvas_fill_rect{ box, style.action.active });
         // TODO: color mapping
         parent.add_primitive("progress"_id,
-                             canvas_fill_rect{ { 0.0f, width * progress, 0.0f, box.bottom }, style.disabled_color });
-        parent.add_primitive("bounds"_id, canvas_stroke_rect{ box, style.normal_color, style.bounds_edge_width });
+                             canvas_fill_rect{ { 0.0f, width * progress, 0.0f, box.bottom }, style.action.disabled });
+        parent.add_primitive("bounds"_id, canvas_stroke_rect{ box, style.action.active, style.bounds_edge_width });
         if(label.has_value()) {
             primitive text =
-                canvas_text{ { 0.0f, style.padding.y }, std::move(label).value(), style.default_font, style.font_color };
+                canvas_text{ { 0.0f, style.padding.y }, std::move(label).value(), style.default_font, style.text.primary };
             const auto text_width = parent.calculate_bounds(text).x;
             std::get<canvas_text>(text).pos.x = (width - text_width) / 2.0f;
             parent.add_primitive("label"_id, std::move(text));
@@ -381,8 +381,9 @@ namespace animgui {
                 button_base{ { 0.0f, 0.0f }, { 0.0f, 0.0f }, focused ? button_status::focused : button_status::normal });
             if(clicked(parent, uid, pressed, focused))
                 index = i;
-            primitive text =
-                canvas_text{ { 0.0f, 0.0f }, labels[i], style.default_font, index == i ? style.font_color : style.normal_color };
+            primitive text = canvas_text{
+                { 0.0f, 0.0f }, labels[i], style.default_font, index == i ? style.text.primary : style.text.disabled
+            };
             const auto content_size = parent.calculate_bounds(text);
 
             auto&& inst = std::get<button_base>(std::get<primitive>(parent.commands()[idx]));
@@ -413,7 +414,7 @@ namespace animgui {
         parent.add_primitive(
             "base"_id,
             canvas_fill_rect{ bounds_aabb{ 0.0f, width, (height - base_height) / 2.0f, (height + base_height) / 2.0f },
-                              style.background_color });
+                              style.background });
 
         assert(min <= val && val <= max);
         auto& progress = parent.storage<float>(full_uid);
@@ -438,7 +439,7 @@ namespace animgui {
 
         parent.add_primitive("base"_id,
                              canvas_fill_rect{ bounds_aabb{ 0.0f, handle_width, 0.0f, height },
-                                               focused ? style.highlight_color : style.normal_color });
+                                               focused ? style.action.hover : style.action.active });
         const auto center = scale * progress + half_width;
         parent.pop_region(bounds_aabb{ center - half_width, center + half_width, 0.0f, height });
 
@@ -466,21 +467,20 @@ namespace animgui {
             state = !state;
         }
 
-        parent.add_primitive("base"_id, canvas_fill_rect{ box, style.background_color });
+        parent.add_primitive("base"_id, canvas_fill_rect{ box, style.background });
         const auto offset = state ? width : 0.0f;
 
         parent.add_primitive(
             "handle"_id,
-            canvas_fill_rect{ { offset, offset + width, 0.0f, height }, focused ? style.highlight_color : style.normal_color });
+            canvas_fill_rect{ { offset, offset + width, 0.0f, height }, focused ? style.action.hover : style.action.disabled });
 
-        primitive text = canvas_text{ { 0.0f, style.padding.y }, state ? "ON" : "OFF", style.default_font, style.font_color };
+        primitive text = canvas_text{ { 0.0f, style.padding.y }, state ? "ON" : "OFF", style.default_font, style.text.primary };
         const auto text_width = parent.calculate_bounds(text).x;
         std::get<canvas_text>(text).pos.x = (width - text_width) / 2.0f + offset;
         parent.add_primitive("label"_id, std::move(text));
 
         parent.add_primitive(
-            "bounds"_id,
-            canvas_stroke_rect{ box, focused ? style.highlight_color : style.normal_color, style.bounds_edge_width });
+            "bounds"_id, canvas_stroke_rect{ box, focused ? style.action.hover : style.action.active, style.bounds_edge_width });
 
         parent.pop_region();
     }

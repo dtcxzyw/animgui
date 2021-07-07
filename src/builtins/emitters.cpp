@@ -16,13 +16,16 @@ namespace animgui {
         }
         static color_rgba select_button_color(const button_status status, const style& style) {
             switch(status) {
-                case button_status::disabled:
-                    return style.disabled_color;
+                case button_status::normal:
+                    return style.action.active;
                 case button_status::focused:
-                    return style.highlight_color;
-                default:
-                    return style.normal_color;
+                    return style.action.hover;
+                case button_status::pressed:
+                    return style.action.selected;
+                case button_status::disabled:
+                    return style.action.disabled;
             }
+            return style.action.active;
         }
         static void emit(const button_base& item, const bounds_aabb& clip_rect, const vec2 offset,
                          std::pmr::vector<command>& commands, const style& style,
@@ -36,7 +39,7 @@ namespace animgui {
 
             const auto p0 = vec2{ render_rect.left, render_rect.top }, p1 = vec2{ render_rect.left, render_rect.bottom },
                        p2 = vec2{ render_rect.right, render_rect.bottom }, p3 = vec2{ render_rect.right, render_rect.top };
-            const auto back = style.background_color;
+            const auto back = style.panel_background;
             const auto front = select_button_color(item.status, style);
             const auto unused = vec2{ 0.0f, 0.0f };
             commands.push_back(
@@ -58,7 +61,8 @@ namespace animgui {
             return { item.bounds.right - item.bounds.left + item.size, item.bounds.bottom - item.bounds.top + item.size };
         }
         static void emit(const canvas_stroke_rect& item, const bounds_aabb& clip_rect, const vec2 offset,
-                         std::pmr::vector<command>& commands, const style&, const std::function<texture_region(font&, glyph_id)>&) {
+                         std::pmr::vector<command>& commands, const style&,
+                         const std::function<texture_region(font&, glyph_id)>&) {
             if(auto rect = bounds_aabb{ item.bounds.left - item.size / 2.0f, item.bounds.right + item.size / 2.0f,
                                         item.bounds.top - item.size / 2.0f, item.bounds.bottom + item.size / 2.0f };
                !clip_bounds(rect, offset, clip_rect))
@@ -82,7 +86,8 @@ namespace animgui {
             return { item.bounds.right - item.bounds.left, item.bounds.bottom - item.bounds.top };
         }
         static void emit(const canvas_fill_rect& item, const bounds_aabb& clip_rect, const vec2 offset,
-                         std::pmr::vector<command>& commands, const style&, const std::function<texture_region(font&, glyph_id)>&) {
+                         std::pmr::vector<command>& commands, const style&,
+                         const std::function<texture_region(font&, glyph_id)>&) {
             auto rect = item.bounds;
             if(!clip_bounds(rect, offset, clip_rect))
                 return;
@@ -103,7 +108,8 @@ namespace animgui {
             return { std::fabs(item.start.x - item.end.x) + item.size, std::fabs(item.start.y - item.end.y) + item.size };
         }
         static void emit(const canvas_line& item, const bounds_aabb& clip_rect, const vec2 offset,
-                         std::pmr::vector<command>& commands, const style&, const std::function<texture_region(font&, glyph_id)>&) {
+                         std::pmr::vector<command>& commands, const style&,
+                         const std::function<texture_region(font&, glyph_id)>&) {
             if(auto rect = bounds_aabb{ std::fmin(item.start.x, item.end.x) - item.size / 2.0f,
                                         std::fmax(item.start.x, item.end.x) + item.size / 2.0f,
                                         std::fmin(item.start.y, item.end.y) - item.size / 2.0f,
@@ -124,7 +130,8 @@ namespace animgui {
             return { item.size, item.size };
         }
         static void emit(const canvas_point& item, const bounds_aabb& clip_rect, const vec2 offset,
-                         std::pmr::vector<command>& commands, const style&, const std::function<texture_region(font&, glyph_id)>&) {
+                         std::pmr::vector<command>& commands, const style&,
+                         const std::function<texture_region(font&, glyph_id)>&) {
             if(auto rect = bounds_aabb{ item.pos.x - item.size / 2.0f, item.pos.x + item.size / 2.0f,
                                         item.pos.y - item.size / 2.0f, item.pos.y + item.size / 2.0f };
                !clip_bounds(rect, offset, clip_rect))
@@ -141,7 +148,8 @@ namespace animgui {
             return { item.bounds.right - item.bounds.left, item.bounds.bottom - item.bounds.top };
         }
         static void emit(const canvas_image& item, const bounds_aabb& clip_rect, const vec2 offset,
-                         std::pmr::vector<command>& commands, const style&, const std::function<texture_region(font&, glyph_id)>&) {
+                         std::pmr::vector<command>& commands, const style&,
+                         const std::function<texture_region(font&, glyph_id)>&) {
             if(auto rect = item.bounds; !clip_bounds(rect, offset, clip_rect))
                 return;
             auto render_rect = item.bounds;

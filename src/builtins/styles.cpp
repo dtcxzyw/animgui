@@ -11,14 +11,14 @@ namespace animgui {
         style.rounding = 0.0f;
         style.bounds_edge_width = 3.0f;
         style.panel_bounds_edge_width = 5.0f;
-        style.padding = { 5.0f, 5.0f };
+        style.padding = { 8.0f, 8.0f };
 
-        style.font_color = { 1.0f, 1.0f, 1.0f, 1.0f };
-        style.panel_background_color = { 0.6f, 0.6f, 0.6f, 1.0f };
-        style.background_color = { 0.3f, 0.3f, 0.3f, 1.0f };
-        style.normal_color = { 0.5f, 0.5f, 0.5f, 1.0f };
-        style.highlight_color = { 0.25f, 0.25f, 0.25f, 1.0f };
-        style.disabled_color = { 0.2f, 0.2f, 0.2f, 1.0f };
-        style.selected_color = { 0.2f, 0.2f, 0.8f, 1.0f };
+        style.background = light_alpha(1.0f);
+        style.panel_background = light_alpha(0.98f);
+
+        style.text = { dark_alpha(0.87f), dark_alpha(0.54f), dark_alpha(0.38f), dark_alpha(0.38f) };
+        style.action = { dark_alpha(0.54f), dark_alpha(0.04f), dark_alpha(0.08f), dark_alpha(0.26f) };
+        style.primary = { 0x7986cb_html_rgb, 0x3f51b5_html_rgb, 0x303f9f_html_rgb, light_alpha(1.0f) };
+        style.secondary = { 0xff4081_html_rgb, 0xf50057_html_rgb, 0xc51162_html_rgb, light_alpha(1.0f) };
     }
 }  // namespace animgui
