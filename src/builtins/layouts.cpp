@@ -447,24 +447,27 @@ namespace animgui {
         }
 
         static void clamp_bounds(bounds_aabb& bounds, const vec2 size) {
-            if(bounds.right - bounds.left < size.x) {
-                if(bounds.left < 0.0f) {
-                    bounds.right -= bounds.left;
-                    bounds.left = 0.0f;
-                } else if(bounds.right > size.x) {
-                    bounds.left -= bounds.right - size.x;
-                    bounds.right = size.x;
-                }
+            if(bounds.left < 0.0f) {
+                bounds.right -= bounds.left;
+                bounds.left = 0.0f;
+            } else if(bounds.right > size.x) {
+                bounds.left -= bounds.right - size.x;
+                bounds.right = size.x;
             }
-            if(bounds.bottom - bounds.top < size.y) {
-                if(bounds.top < 0.0f) {
-                    bounds.bottom -= bounds.top;
-                    bounds.top = 0.0f;
-                } else if(bounds.bottom > size.y) {
-                    bounds.top -= bounds.bottom - size.y;
-                    bounds.bottom = size.y;
-                }
+
+            bounds.left = std::fmax(bounds.left, 0.0f);
+            bounds.right = std::fmin(bounds.right, size.x);
+
+            if(bounds.top < 0.0f) {
+                bounds.bottom -= bounds.top;
+                bounds.top = 0.0f;
+            } else if(bounds.bottom > size.y) {
+                bounds.top -= bounds.bottom - size.y;
+                bounds.bottom = size.y;
             }
+
+            bounds.top = std::fmax(bounds.top, 0.0f);
+            bounds.bottom = std::fmin(bounds.bottom, size.y);
         }
 
     public:
