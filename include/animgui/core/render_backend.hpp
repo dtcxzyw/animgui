@@ -99,6 +99,7 @@ namespace animgui {
         virtual std::shared_ptr<texture> create_texture(uvec2 size, channel channels) = 0;
         virtual std::shared_ptr<texture> create_texture_from_native_handle(uint64_t handle, uvec2 size, channel channels) = 0;
         virtual void emit(uvec2 screen_size) = 0;
+        [[nodiscard]] virtual uint64_t render_time() const noexcept = 0;
         [[nodiscard]] virtual primitive_type supported_primitives() const noexcept = 0;
     };
 }  // namespace animgui

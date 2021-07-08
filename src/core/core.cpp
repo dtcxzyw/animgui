@@ -8,6 +8,7 @@
 #include <animgui/core/font_backend.hpp>
 #include <animgui/core/image_compactor.hpp>
 #include <animgui/core/input_backend.hpp>
+#include <animgui/core/statistics.hpp>
 #include <animgui/core/style.hpp>
 #include <cmath>
 #include <cstring>
@@ -449,7 +450,7 @@ namespace animgui {
         }
 
         void transform(std::pmr::vector<command>& command_list) const {
-            for(auto& [_, __, desc] : command_list)
+            for(auto& [bounds, clip, desc] : command_list)
                 if(desc.index() == 1) {
                     // ReSharper disable once CppTooWideScope
                     auto&& [type, vertices, _, point_line_size] = std::get<primitives>(desc);
@@ -487,6 +488,28 @@ namespace animgui {
         }
     };
 
+    class smooth_profiler final {
+        std::pmr::deque<uint64_t> m_samples;
+        uint64_t m_sum;
+
+    public:
+        explicit smooth_profiler(std::pmr::memory_resource* memory_resource) : m_samples{ memory_resource }, m_sum{ 0 } {}
+
+        uint32_t add_sample(const uint64_t sample) {
+            m_samples.push_back(sample);
+            m_sum += sample;
+            while(m_samples.size() > 600) {
+                m_sum -= m_samples.front();
+                m_samples.pop_front();
+            }
+            if(m_samples.size() >= 30)
+                return static_cast<uint32_t>(
+                    static_cast<double>(m_sum / m_samples.size()) /         // NOLINT(bugprone-integer-division)
+                    static_cast<double>(clocks_per_second() / 1'000'000));  // NOLINT(bugprone-integer-division)
+            return 0;
+        }
+    };
+
     class context_impl final : public context {
         input_backend& m_input_backend;
         render_backend& m_render_backend;
@@ -501,6 +524,9 @@ namespace animgui {
         command_fallback_translator m_command_fallback_translator;
         std::pmr::memory_resource* m_memory_resource;
         style m_style;
+        pipeline_statistics m_statistics;
+        std::pmr::deque<uint64_t> m_frame_time_points;
+        smooth_profiler profiler[7];
 
     public:
         context_impl(input_backend& input_backend, render_backend& render_backend, font_backend& font_backend, emitter& emitter,
@@ -511,7 +537,11 @@ namespace animgui {
               m_image_compactor{ image_compactor }, m_state_manager{ memory_resource }, m_codepoint_locator{ image_compactor,
                                                                                                              memory_resource },
               m_command_fallback_translator{ render_backend.supported_primitives() & command_optimizer.supported_primitives() },
-              m_memory_resource{ memory_resource }, m_style{} {
+              m_memory_resource{ memory_resource }, m_style{}, m_statistics{}, m_frame_time_points{ memory_resource }, profiler{
+                  smooth_profiler{ memory_resource }, smooth_profiler{ memory_resource }, smooth_profiler{ memory_resource },
+                  smooth_profiler{ memory_resource }, smooth_profiler{ memory_resource }, smooth_profiler{ memory_resource },
+                  smooth_profiler{ memory_resource }
+              } {
             set_classic_style(*this);
         }
         void reset_cache() override {
@@ -526,26 +556,61 @@ namespace animgui {
                        const std::function<void(canvas&)>& render_function) override {
             std::pmr::monotonic_buffer_resource arena{ 1 << 15, m_memory_resource };
 
+            const auto tp1 = current_time();
+            m_frame_time_points.push_back(tp1);
+            while(m_frame_time_points.size() > 600)
+                m_frame_time_points.pop_front();
+            if(m_frame_time_points.size() >= 30) {
+                m_statistics.smooth_fps =
+                    static_cast<uint32_t>(static_cast<double>(m_frame_time_points.size() - 1) /
+                                          (static_cast<double>(m_frame_time_points.back() - m_frame_time_points.front()) /
+                                           static_cast<double>(clocks_per_second())));
+            } else
+                m_statistics.smooth_fps = 0;
+
             canvas_impl canvas_root{ *this,           vec2{ static_cast<float>(width), static_cast<float>(height) },
                                      delta_t,         m_input_backend,
                                      m_animator,      m_emitter,
                                      m_state_manager, &arena };
             render_function(canvas_root);
             canvas_root.finish();
+            const auto tp2 = current_time();
+            m_statistics.draw_time = profiler[0].add_sample(tp2 - tp1);
+            m_statistics.generated_operation = static_cast<uint32_t>(canvas_root.commands().size());
 
             auto commands = m_emitter.transform(canvas_root.reserved_size(), canvas_root.commands(), m_style,
                                                 [&](font& font_ref, const glyph_id glyph) -> texture_region {
                                                     return m_codepoint_locator.locate(font_ref, glyph);
                                                 });
+            const auto tp3 = current_time();
+            m_statistics.emit_time = profiler[1].add_sample(tp3 - tp2);
+            m_statistics.emitted_draw_call = static_cast<uint32_t>(commands.size());
+
             m_command_fallback_translator.transform(commands);
+            const auto tp4 = current_time();
+            m_statistics.fallback_time = profiler[2].add_sample(tp4 - tp3);
+            m_statistics.transformed_draw_call = static_cast<uint32_t>(commands.size());
+
             auto optimized_commands = m_command_optimizer.optimize({ width, height }, std::move(commands));
+            const auto tp5 = current_time();
+            m_statistics.optimize_time = profiler[3].add_sample(tp5 - tp4);
+            m_statistics.optimized_draw_call = static_cast<uint32_t>(optimized_commands.size());
+
             m_render_backend.update_command_list({ width, height }, std::move(optimized_commands));
+
+            m_statistics.frame_time =
+                profiler[4].add_sample(tp5 - tp1 + m_render_backend.render_time() + m_input_backend.input_time());
+            m_statistics.render_time = profiler[5].add_sample(m_render_backend.render_time());
+            m_statistics.input_time = profiler[6].add_sample(m_input_backend.input_time());
         }
         texture_region load_image(const image_desc& image, const float max_scale) override {
             return m_image_compactor.compact(image, max_scale);
         }
         [[nodiscard]] std::shared_ptr<font> load_font(const std::pmr::string& name, const float height) const override {
             return m_font_backend.load_font(name, height);
+        }
+        [[nodiscard]] const pipeline_statistics& statistics() noexcept override {
+            return m_statistics;
         }
     };
     ANIMGUI_API std::unique_ptr<context> create_animgui_context(input_backend& input_backend, render_backend& render_backend,

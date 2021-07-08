@@ -17,6 +17,7 @@ namespace animgui {
     class command_optimizer;
     class image_compactor;
     class font;
+    struct pipeline_statistics;
 
     // TODO: color management & interacting mode(mouse&keyboard/VR/game pad)
     class context {
@@ -34,6 +35,7 @@ namespace animgui {
         virtual texture_region load_image(const image_desc& image, float max_scale) = 0;
         [[nodiscard]] virtual std::shared_ptr<font> load_font(const std::pmr::string& name, float height) const = 0;
         virtual style& global_style() noexcept = 0;
+        [[nodiscard]] virtual const pipeline_statistics& statistics() noexcept = 0;
     };
 
     ANIMGUI_API std::unique_ptr<context>

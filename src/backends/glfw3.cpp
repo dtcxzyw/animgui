@@ -242,6 +242,7 @@ namespace animgui {
         vec2 m_imm_anchor;
 
         const std::function<void()>& m_redraw;
+        uint64_t m_input_time;
 
         void add_char(const uint32_t codepoint) {
             m_input_characters.push_back(codepoint);
@@ -273,7 +274,7 @@ namespace animgui {
               m_mouse_move{ 0.0f, 0.0f }, m_scroll{ 0.0f, 0.0f }, m_key_state{}, m_key_state_pulse{},
               m_key_state_pulse_repeated{}, m_input_mode{ input_mode::mouse }, m_cursor{ cursor::arrow }, m_game_pad_state{},
               m_direction{ 0.0f, 0.0f }, m_direction_navigation{ 0.0f, 0.0f }, m_imm_bounds{ 0.0f, 0.0f, 0.0f, 0.0f },
-              m_imm_anchor{ 0.0f, 0.0f }, m_redraw{ redraw } {
+              m_imm_anchor{ 0.0f, 0.0f }, m_redraw{ redraw }, m_input_time{ 0 } {
             m_available_game_pad.reserve(std::size(m_game_pad_state));
             glfwSetWindowUserPointer(m_window, this);
             glfwSetCharCallback(m_window, [](GLFWwindow* const win, const unsigned int cp) {
@@ -376,6 +377,8 @@ namespace animgui {
             m_imm_anchor = pos;
         }
         void new_frame() override {
+            const auto tp1 = current_time();
+
 #ifdef ANIMGUI_WINDOWS
             {
                 const auto handle = glfwGetWin32Window(m_window);
@@ -465,6 +468,9 @@ namespace animgui {
                 m_direction.y = -1.0f;
             if(get_key_pulse(key_code::down, true))
                 m_direction.y = 1.0f;
+
+            const auto tp2 = current_time();
+            m_input_time = tp2 - tp1;
         }
         [[nodiscard]] std::pmr::string get_game_pad_name(const size_t idx) const override {
             return glfwGetGamepadName(static_cast<int>(idx));
@@ -510,6 +516,9 @@ namespace animgui {
 
         [[nodiscard]] vec2 action_direction_pulse_repeated(const bool navigation) const noexcept override {
             return navigation ? m_direction_navigation : m_direction;
+        }
+        [[nodiscard]] uint64_t input_time() const noexcept override {
+            return m_input_time;
         }
     };
 

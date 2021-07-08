@@ -154,5 +154,7 @@ namespace animgui {
 
         [[nodiscard]] virtual bool action_press() const noexcept = 0;
         [[nodiscard]] virtual vec2 action_direction_pulse_repeated(bool navigation = false) const noexcept = 0;
+
+        [[nodiscard]] virtual uint64_t input_time() const noexcept = 0;
     };
 }  // namespace animgui

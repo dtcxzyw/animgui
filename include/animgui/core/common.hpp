@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 
 #pragma once
+#include <chrono>
 #include <cmath>
 #include <cstdint>
 #include <limits>
@@ -142,6 +143,15 @@ namespace animgui {
     static constexpr void* offset(U T::*ptr) {
         return &(reinterpret_cast<T*>(0)->*ptr);
     }
+
+    using timer = std::chrono::high_resolution_clock;
+    inline uint64_t current_time() {
+        return timer::now().time_since_epoch().count();
+    }
+    constexpr uint64_t clocks_per_second() {
+        return timer::period::den;
+    }
+
 }  // namespace animgui
 
 constexpr animgui::identifier operator""_id(const char* str, const std::size_t len) {

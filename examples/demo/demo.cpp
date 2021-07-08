@@ -2,6 +2,7 @@
 
 #include "../application.hpp"
 #include "animgui/core/input_backend.hpp"
+#include "animgui/core/statistics.hpp"
 
 #include <animgui/builtins/layouts.hpp>
 #include <animgui/builtins/widgets.hpp>
@@ -20,8 +21,10 @@ namespace animgui {
         float m_float_value = 0.0f;
         bool m_switch_state = false;
 
+        const pipeline_statistics& m_statistics;
+
     public:
-        explicit demo(context& context) {
+        explicit demo(context& context) : m_statistics{ context.statistics() } {
             auto&& style = context.global_style();
             style.default_font = context.load_font("msyh", 30.0f);
         }
@@ -83,6 +86,60 @@ namespace animgui {
                                           text(layout, "Hello World 你好 世界");
                                           layout.newline();
 
+                                          text(layout, std::pmr::string{ "FPS " + std::to_string(m_statistics.smooth_fps) });
+                                          layout.newline();
+                                          text(layout,
+                                               std::pmr::string{
+                                                   "frame time " +
+                                                   std::to_string(static_cast<float>(m_statistics.frame_time) / 1000.0f) });
+                                          layout.newline();
+                                          text(layout,
+                                               std::pmr::string{
+                                                   "input time " +
+                                                   std::to_string(static_cast<float>(m_statistics.input_time) / 1000.0f) });
+                                          layout.newline();
+                                          text(layout,
+                                               std::pmr::string{
+                                                   "draw time " +
+                                                   std::to_string(static_cast<float>(m_statistics.draw_time) / 1000.0f) });
+                                          layout.newline();
+                                          text(layout,
+                                               std::pmr::string{
+                                                   "emit time " +
+                                                   std::to_string(static_cast<float>(m_statistics.emit_time) / 1000.0f) });
+                                          layout.newline();
+                                          text(layout,
+                                               std::pmr::string{
+                                                   "fallback time " +
+                                                   std::to_string(static_cast<float>(m_statistics.fallback_time) / 1000.0f) });
+                                          layout.newline();
+                                          text(layout,
+                                               std::pmr::string{
+                                                   "optimize time " +
+                                                   std::to_string(static_cast<float>(m_statistics.optimize_time) / 1000.0f) });
+                                          layout.newline();
+                                          text(layout,
+                                               std::pmr::string{
+                                                   "render time " +
+                                                   std::to_string(static_cast<float>(m_statistics.render_time) / 1000.0f) });
+                                          layout.newline();
+                                          text(layout,
+                                               std::pmr::string{ "generated operation " +
+                                                                 std::to_string(m_statistics.generated_operation) });
+                                          layout.newline();
+                                          text(layout,
+                                               std::pmr::string{ "emitted draw call " +
+                                                                 std::to_string(m_statistics.emitted_draw_call) });
+                                          layout.newline();
+                                          text(layout,
+                                               std::pmr::string{ "transformed draw call " +
+                                                                 std::to_string(m_statistics.transformed_draw_call) });
+                                          layout.newline();
+                                          text(layout,
+                                               std::pmr::string{ "optimized draw call " +
+                                                                 std::to_string(m_statistics.optimized_draw_call) });
+
+                                          layout.newline();
                                           const auto [x, y] = layout.input().get_cursor_pos();
                                           text(layout,
                                                std::pmr::string{ "X: " + std::to_string(x) + " Y: " + std::to_string(y) });

@@ -138,6 +138,8 @@ namespace animgui {
         bool m_scissor_restricted = false;
         GLuint m_bind_tex = 0;
 
+        uint64_t m_render_time = 0;
+
         static void check_compile_errors(const GLuint shader, const std::string_view type) {
             GLint success;
             std::array<GLchar, 1024> buffer = {};
@@ -280,6 +282,8 @@ namespace animgui {
         }
 
         void emit(const uvec2 screen_size) override {
+            const auto tp1 = current_time();
+
             glEnable(GL_SCISSOR_TEST);
             make_dirty();
             m_scissor_restricted = true;
@@ -304,11 +308,18 @@ namespace animgui {
 
                 std::visit([&](auto&& item) { emit(item, m_window_size); }, command.desc);
             }
+
+            const auto tp2 = current_time();
+            m_render_time = tp2 - tp1;
         }
         [[nodiscard]] primitive_type supported_primitives() const noexcept override {
             // Notice: Wide lines (width>1.0) in OpenGL3 are deprecated.
             return primitive_type::points | primitive_type::quads | primitive_type::triangle_fan |
                 primitive_type::triangle_strip | primitive_type::triangles;
+        }
+
+        [[nodiscard]] uint64_t render_time() const noexcept override {
+            return m_render_time;
         }
     };
 

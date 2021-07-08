@@ -19,6 +19,8 @@
         [[nodiscard]] virtual std::shared_ptr<font> load_font(const std::pmr::string& name, float height) const = 0;
         // 获取风格配置的引用
         virtual style& global_style() noexcept = 0;
+        // 获取最近几十帧的性能统计信息，具体信息参见pipeline_staticstics结构体定义
+        [[nodiscard]] virtual const pipeline_statistics& statistics() noexcept = 0;
     };
 
     // 使用选中的组件构建animgui上下文，构建后仅需操作render_backend和context本身

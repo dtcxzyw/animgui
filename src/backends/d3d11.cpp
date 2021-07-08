@@ -211,6 +211,8 @@ namespace animgui {
         bool m_scissor_restricted = false;
         ID3D11ShaderResourceView* m_bind_tex = nullptr;
 
+        uint64_t m_render_time = 0;
+
         void check_d3d_error(const HRESULT res) const {
             if(res != S_OK)
                 m_error_checker(res);
@@ -418,6 +420,8 @@ namespace animgui {
             m_command_list = std::move(command_list);
         }
         void emit(const uvec2 screen_size) override {
+            const auto tp1 = current_time();
+
             make_dirty();
             m_scissor_restricted = true;
 
@@ -442,6 +446,9 @@ namespace animgui {
 
                 std::visit([&](auto&& item) { emit(item, m_window_size); }, command.desc);
             }
+
+            const auto tp2 = current_time();
+            m_render_time = tp2 - tp1;
         }
         std::shared_ptr<texture> create_texture(uvec2 size, channel channels) override {
             return std::make_shared<texture_impl>(m_device, m_device_context, channels, size, m_error_checker);
@@ -452,6 +459,9 @@ namespace animgui {
         }
         [[nodiscard]] primitive_type supported_primitives() const noexcept override {
             return primitive_type::triangle_strip | primitive_type::triangles;
+        }
+        [[nodiscard]] uint64_t render_time() const noexcept override {
+            return m_render_time;
         }
     };
     ANIMGUI_API std::shared_ptr<render_backend> create_d3d11_backend(ID3D11Device* device, ID3D11DeviceContext* device_context,

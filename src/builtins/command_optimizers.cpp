@@ -125,6 +125,9 @@ namespace animgui {
             };
 
             const command_pusher emit1 = [&](command cmd) {
+                if(cmd.clip.has_value() && !clipped(cmd.clip.value(), cmd.bounds))
+                    cmd.clip.reset();
+
                 const auto cid = stage1.size();
                 size_t prev_count = 0;
 
@@ -141,9 +144,6 @@ namespace animgui {
             auto magic = std::numeric_limits<size_t>::max();
 
             for(auto beg = src.begin(); beg != src.end(); ++beg) {
-                if(beg->clip.has_value() && !clipped(beg->clip.value(), beg->bounds))
-                    beg->clip.reset();
-
                 if(const auto current_hash =
                        beg->clip.has_value() ? fnv1a_impl(&beg->clip.value(), sizeof(bounds_aabb)) : identifier{ --magic };
                    current_hash.id != clip_hash.id) {
