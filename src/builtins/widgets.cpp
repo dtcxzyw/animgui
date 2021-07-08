@@ -69,8 +69,8 @@ namespace animgui {
         pressed = parent.input().action_press();
         return state;
     }
-    ANIMGUI_API void text_edit(canvas& parent, const float glyph_width, std::pmr::string& str,
-                               std::optional<std::pmr::string> placeholder) {
+    ANIMGUI_API text_edit_status text_edit(canvas& parent, const float glyph_width, std::pmr::string& str,
+                                           std::optional<std::pmr::string> placeholder) {
         auto&& style = parent.global_style();
         const auto height = style.default_font->height() + 2.0f * style.padding.y;
         const auto width = style.default_font->standard_width() * glyph_width + 2.0f * style.padding.x;
@@ -89,6 +89,7 @@ namespace animgui {
 
         auto&& state = parent.storage<edit_state>(uid);
         auto&& [edit, override_mode, pos_beg, pos_end, offset] = state;
+        bool committed = false;
 
         if(selected(parent, uid)) {
             // TODO: select
@@ -114,6 +115,7 @@ namespace animgui {
             pos_end = pos_beg;
 
         } else if(edit && parent.input().action_press()) {
+            committed = true;
             edit = false;
             offset = 0.0f;
             override_mode = false;
@@ -184,7 +186,7 @@ namespace animgui {
                     ++pos_end;
                 }
                 delete_selected();
-            } else if(dir.x == -1.0f) {
+            } else if(std::fabs(-1.0f - dir.x) < 1e-3f) {
                 if(pos_beg == pos_end) {
                     if(pos_beg >= 1) {
                         pos_end = --pos_beg;
@@ -195,7 +197,7 @@ namespace animgui {
                     pos_end = pos_beg;
                     end = beg;
                 }
-            } else if(dir.x == 1.0f) {
+            } else if(std::fabs(1.0f - dir.x) < 1e-3f) {
                 if(pos_beg == pos_end) {
                     if(end != str.cend()) {
                         pos_beg = ++pos_end;
@@ -314,6 +316,7 @@ namespace animgui {
         parent.pop_region();
 
         parent.pop_region();
+        return committed ? text_edit_status::committed : (edit ? text_edit_status::active : text_edit_status::inactive);
     }
     ANIMGUI_API void checkbox(canvas& parent, std::pmr::string label, bool& state) {
         const auto id = parent.push_region(parent.region_sub_uid()).second;

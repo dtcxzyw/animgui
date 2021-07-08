@@ -19,7 +19,8 @@ namespace animgui {
     ANIMGUI_API void slider(canvas& parent, float width, float handle_width, float& val, float min, float max);
     ANIMGUI_API void checkbox(canvas& parent, std::pmr::string label, bool& state);
     ANIMGUI_API void switch_(canvas& parent, bool& state);
-    ANIMGUI_API void text_edit(canvas& parent, float glyph_width, std::pmr::string& str,
+    enum class text_edit_status { inactive, active, committed };
+    ANIMGUI_API text_edit_status text_edit(canvas& parent, float glyph_width, std::pmr::string& str,
                                std::optional<std::pmr::string> placeholder = std::nullopt);
     ANIMGUI_API void radio_button(canvas& parent, const std::pmr::vector<std::pmr::string>& labels, size_t& index);
     ANIMGUI_API void color_edit(canvas& parent, color_rgba& color);

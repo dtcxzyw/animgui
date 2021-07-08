@@ -63,7 +63,8 @@ UI组件
     // glyph_width: 希望完全显示的字符数（估计）
     // str: 当前文本
     // placeholder: 文本编辑框为空时显示的内容
-    void text_edit(canvas& parent, float glyph_width, std::pmr::string& str, std::optional<std::pmr::string> placeholder = std::nullopt);
+    // 返回值: 有inactive，active，committed三种状态，在文本修改完毕（失去焦点）的瞬间会返回committed
+    text_edit_status text_edit(canvas& parent, float glyph_width, std::pmr::string& str, std::optional<std::pmr::string> placeholder = std::nullopt);
     
     // 单选按钮
     // parent: 画布

@@ -100,8 +100,7 @@ namespace animgui {
     };
     ANIMGUI_API void tab(canvas& parent, const std::function<void(tab_canvas&)>& render_function);
     ANIMGUI_API void modal(canvas& parent, vec2 size, const std::function<void(canvas&)>& render_function);
-
-    ANIMGUI_API void layout_vertical(canvas& parent, float max_height, const std::function<void(canvas&)>& render_function);
+    
     ANIMGUI_API void select(canvas& parent, std::pmr::string title, bool unique,
                             const std::function<void(canvas&)>& render_function);
     ANIMGUI_API void sortable(canvas& parent, std::pmr::string title,
