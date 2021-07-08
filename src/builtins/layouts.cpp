@@ -143,9 +143,14 @@ namespace animgui {
         void pop_region(const std::optional<bounds_aabb>& new_bounds) override {
             m_parent.pop_region(new_bounds);
             if(--m_current_depth == 0) {
-                const auto [x1, x2, y1, y2] =
-                    storage<bounds_aabb>(mix(std::get<identifier>(m_current_line.back()), "last_bounds"_id));
-                std::get<vec2>(m_current_line.back()) = { x2 - x1, y2 - y1 };
+                if(new_bounds.value_or(std::get<op_push_region>(commands()[std::get<size_t>(m_current_line.back())]).bounds)
+                       .is_escaped())
+                    m_current_line.pop_back();
+                else {
+                    const auto [x1, x2, y1, y2] =
+                        storage<bounds_aabb>(mix(std::get<identifier>(m_current_line.back()), "last_bounds"_id));
+                    std::get<vec2>(m_current_line.back()) = { x2 - x1, y2 - y1 };
+                }
             }
         }
         void newline() override {
@@ -508,24 +513,35 @@ namespace animgui {
                     std::pmr::vector<vec2> offset{ { { 0.0f, 0.0f } }, memory_resource() };
                     bounds_aabb content_bounds{ 0.0f, 0.0f, 0.0f, 0.0f }, sub_bounds{ 0.0f, 0.0f, 0.0f, 0.0f };
                     bool valid = false;
+                    uint32_t escaped_count = 0;
+
                     for(size_t idx = beg; idx < end; ++idx) {
                         // ReSharper disable once CppDefaultCaseNotHandledInSwitchStatement
                         switch(const auto& cmd = commands()[idx]; cmd.index()) {
                             case 0: {
-                                sub_bounds = std::get<op_push_region>(cmd).bounds;
-                                const auto current = offset.back();
-                                offset.push_back({ current.x + sub_bounds.left, current.y + sub_bounds.top });
-                                valid = true;
+                                if(const auto current_bounds = std::get<op_push_region>(cmd).bounds;
+                                   escaped_count || current_bounds.is_escaped()) {
+                                    ++escaped_count;
+                                } else {
+                                    sub_bounds = current_bounds;
+                                    const auto current = offset.back();
+                                    offset.push_back({ current.x + sub_bounds.left, current.y + sub_bounds.top });
+                                    valid = true;
+                                }
                             } break;
                             case 1: {
-                                offset.pop_back();
-                                if(valid) {
-                                    const auto current = offset.back();
-                                    content_bounds.left = std::fmin(content_bounds.left, sub_bounds.left + current.x);
-                                    content_bounds.right = std::fmax(content_bounds.right, sub_bounds.right + current.x);
-                                    content_bounds.top = std::fmin(content_bounds.top, sub_bounds.top + current.y);
-                                    content_bounds.bottom = std::fmax(content_bounds.bottom, sub_bounds.bottom + current.y);
-                                    valid = false;
+                                if(escaped_count) {
+                                    --escaped_count;
+                                } else {
+                                    offset.pop_back();
+                                    if(valid) {
+                                        const auto current = offset.back();
+                                        content_bounds.left = std::fmin(content_bounds.left, sub_bounds.left + current.x);
+                                        content_bounds.right = std::fmax(content_bounds.right, sub_bounds.right + current.x);
+                                        content_bounds.top = std::fmin(content_bounds.top, sub_bounds.top + current.y);
+                                        content_bounds.bottom = std::fmax(content_bounds.bottom, sub_bounds.bottom + current.y);
+                                        valid = false;
+                                    }
                                 }
                             } break;
                         }

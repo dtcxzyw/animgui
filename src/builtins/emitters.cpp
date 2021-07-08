@@ -244,23 +244,38 @@ namespace animgui {
             stack<std::pair<bounds_aabb, vec2>> clip_stack{ &arena };
             clip_stack.push({ { 0.0f, size.x, 0.0f, size.y }, { 0.0f, 0.0f } });
             uint32_t clip_discard = 0;
+            stack<uint32_t> escaped_clip_discard{ &arena };
+            stack<bool> escaped_stack{ &arena };
 
             for(auto&& operation : operations) {
                 switch(operation.index()) {
                     case 0: {
                         auto cur = std::get<0>(operation).bounds;
-                        const vec2 offset = { cur.left, cur.top };
-                        if(clip_discard || !clip_bounds(cur, clip_stack.top().second, clip_stack.top().first))
-                            ++clip_discard;
-                        else {
-                            clip_stack.push({ cur, clip_stack.top().second + offset });
+                        escaped_stack.push(cur.is_escaped());
+                        if(cur.is_escaped()) {
+                            escaped_clip_discard.push(clip_discard);
+                            clip_stack.push({ { 0.0f, size.x, 0.0f, size.y }, { 0.0f, 0.0f } });
+                            clip_discard = 0;
+                        } else {
+                            const vec2 offset = { cur.left, cur.top };
+                            if(clip_discard || !clip_bounds(cur, clip_stack.top().second, clip_stack.top().first))
+                                ++clip_discard;
+                            else {
+                                clip_stack.push({ cur, clip_stack.top().second + offset });
+                            }
                         }
                     } break;
                     case 1: {
-                        if(clip_discard)
-                            --clip_discard;
-                        else
-                            clip_stack.pop();
+                        if(escaped_stack.top()) {
+                            clip_discard = escaped_clip_discard.top();
+                            escaped_clip_discard.pop();
+                        } else {
+                            if(clip_discard)
+                                --clip_discard;
+                            else
+                                clip_stack.pop();
+                        }
+                        escaped_stack.pop();
                     } break;
                     default: {
                         if(clip_discard)

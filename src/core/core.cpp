@@ -183,7 +183,8 @@ namespace animgui {
             auto&& current_bounds = std::get<op_push_region>(m_commands[idx]).bounds;
             if(bounds.has_value())
                 current_bounds = bounds.value();
-            storage<bounds_aabb>(mix(uid, "last_bounds"_id)) = current_bounds;
+            storage<bounds_aabb>(mix(uid, "last_bounds"_id)) =
+                current_bounds.is_escaped() ? bounds_aabb{ 0.0f, m_size.x, 0.0f, m_size.y } : current_bounds;
         }
         [[nodiscard]] identifier current_region_uid() const {
             return m_region_stack.back().uid;
@@ -510,7 +511,7 @@ namespace animgui {
               m_image_compactor{ image_compactor }, m_state_manager{ memory_resource }, m_codepoint_locator{ image_compactor,
                                                                                                              memory_resource },
               m_command_fallback_translator{ render_backend.supported_primitives() },
-              m_memory_resource{ memory_resource }, m_style{ nullptr, {}, {}, {}, {}, {}, {}, {}, 0.0f } {
+              m_memory_resource{ memory_resource }, m_style{} {
             set_classic_style(*this);
         }
         void reset_cache() override {

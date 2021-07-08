@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: MIT
 
 #pragma once
+#include <cmath>
 #include <cstdint>
+#include <limits>
 #include <memory_resource>
 #include <stack>
 
@@ -47,6 +49,14 @@ namespace animgui {
 
         [[nodiscard]] constexpr vec2 size() const noexcept {
             return { right - left, bottom - top };
+        }
+
+        static constexpr bounds_aabb escaped() noexcept {
+            return { std::numeric_limits<float>::infinity(), 0.0f, 0.0f, 0.0f };
+        }
+
+        [[nodiscard]] bool is_escaped() const noexcept {
+            return std::isinf(left);
         }
     };
     inline void offset_bounds(bounds_aabb& sub, const vec2 offset) {
