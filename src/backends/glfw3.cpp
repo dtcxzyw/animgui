@@ -3,8 +3,16 @@
 #include <GLFW/glfw3.h>
 #include <animgui/backends/glfw3.hpp>
 #include <animgui/core/input_backend.hpp>
-#include <cstring>
 #include <cmath>
+#include <cstring>
+
+#ifdef ANIMGUI_WINDOWS
+#define NOMINMAX
+#define GLFW_EXPOSE_NATIVE_WIN32
+#include <GLFW/glfw3native.h>
+#include <WinUser.h>
+#include <imm.h>
+#endif
 
 namespace animgui {
     static key_code cast_key_code(int code) {
@@ -213,6 +221,7 @@ namespace animgui {
         using clock = std::chrono::high_resolution_clock;
 
         GLFWwindow* m_window;
+        vec2 m_scroll_factor;
         vec2 m_cursor_pos;
         vec2 m_mouse_move;
         vec2 m_scroll;
@@ -228,6 +237,9 @@ namespace animgui {
         vec2 m_direction;
         clock::time_point m_last_time;
         vec2 m_direction_navigation;
+
+        bounds_aabb m_imm_bounds;
+        vec2 m_imm_anchor;
 
         const std::function<void()>& m_redraw;
 
@@ -257,11 +269,11 @@ namespace animgui {
 
     public:
         explicit glfw3_backend(GLFWwindow* window, const std::function<void()>& redraw)
-            : m_window{ window }, m_cursor_pos{ 0.0f, 0.0f }, m_mouse_move{ 0.0f, 0.0f }, m_scroll{ 0.0f, 0.0f }, m_key_state{},
-              m_key_state_pulse{}, m_key_state_pulse_repeated{}, m_input_mode{ input_mode::mouse }, m_cursor{ cursor::arrow },
-              m_game_pad_state{}, m_direction{ 0.0f, 0.0f }, m_last_time{}, m_direction_navigation{ 0.0f, 0.0f }, m_redraw{
-                  redraw
-              } {
+            : m_window{ window }, m_scroll_factor{ 0.0f, 0.0f }, m_cursor_pos{ 0.0f, 0.0f },
+              m_mouse_move{ 0.0f, 0.0f }, m_scroll{ 0.0f, 0.0f }, m_key_state{}, m_key_state_pulse{},
+              m_key_state_pulse_repeated{}, m_input_mode{ input_mode::mouse }, m_cursor{ cursor::arrow }, m_game_pad_state{},
+              m_direction{ 0.0f, 0.0f }, m_direction_navigation{ 0.0f, 0.0f }, m_imm_bounds{ 0.0f, 0.0f, 0.0f, 0.0f },
+              m_imm_anchor{ 0.0f, 0.0f }, m_redraw{ redraw } {
             m_available_game_pad.reserve(std::size(m_game_pad_state));
             glfwSetWindowUserPointer(m_window, this);
             glfwSetCharCallback(m_window, [](GLFWwindow* const win, const unsigned int cp) {
@@ -291,6 +303,20 @@ namespace animgui {
             m_cursors[cursor::hand] = glfwCreateStandardCursor(GLFW_HAND_CURSOR);
             m_cursors[cursor::horizontal] = glfwCreateStandardCursor(GLFW_HRESIZE_CURSOR);
             m_cursors[cursor::vertical] = glfwCreateStandardCursor(GLFW_VRESIZE_CURSOR);
+
+#ifdef ANIMGUI_WINDOWS
+            {
+                UINT w, h;
+                if(!SystemParametersInfoA(SPI_GETWHEELSCROLLCHARS, 0, &w, 0))
+                    w = 3;
+                if(!SystemParametersInfoA(SPI_GETWHEELSCROLLLINES, 0, &h, 0))
+                    h = 3;
+                m_scroll_factor = { static_cast<float>(w), static_cast<float>(h) };
+            }
+#else
+            // TODO: Linux & MacOS
+            m_scroll_factor = { 3.0f, 3.0f };
+#endif
         }
 
         glfw3_backend(const glfw3_backend&) = delete;
@@ -342,7 +368,35 @@ namespace animgui {
         [[nodiscard]] vec2 scroll() const noexcept override {
             return m_scroll;
         }
+        [[nodiscard]] vec2 scroll_factor() const noexcept override {
+            return m_scroll_factor;
+        }
+        void set_input_candidate_window(const bounds_aabb bounds, const vec2 pos) override {
+            m_imm_bounds = bounds;
+            m_imm_anchor = pos;
+        }
         void new_frame() override {
+#ifdef ANIMGUI_WINDOWS
+            {
+                const auto handle = glfwGetWin32Window(m_window);
+                const auto imm = ImmGetContext(handle);
+
+                CANDIDATEFORM desc{ 0, CFS_EXCLUDE, POINT{ static_cast<LONG>(m_imm_anchor.x), static_cast<LONG>(m_imm_anchor.y) },
+                                    RECT {
+                                        static_cast<LONG>(std::floor(m_imm_bounds.left)),
+                                        static_cast<LONG>(std::floor(m_imm_bounds.top)),
+                                        static_cast<LONG>(std::ceil(m_imm_bounds.right)),
+                                        static_cast<LONG>(std::ceil(m_imm_bounds.bottom))
+                                    } };
+
+                ImmSetCandidateWindow(imm, &desc);
+                ImmReleaseContext(handle, imm);
+
+                m_imm_anchor = { 0.0f, 0.0f };
+                m_imm_bounds = { 0.0f, 0.0f, 0.0f, 0.0f };
+            }
+#endif
+
             glfwSetCursor(m_window, m_cursors[m_cursor]);
 
             m_cursor = cursor::arrow;

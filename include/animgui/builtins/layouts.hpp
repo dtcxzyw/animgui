@@ -105,7 +105,6 @@ namespace animgui {
                             const std::function<void(canvas&)>& render_function);
     ANIMGUI_API void sortable(canvas& parent, std::pmr::string title,
                               const std::function<void(row_layout_canvas&)>& render_function);
-    ANIMGUI_API void group(canvas& parent, const std::function<void(canvas&)>& render_function);
     ANIMGUI_API void popup(canvas& parent, std::pmr::string title, const std::function<void(canvas&)>& render_function);
     class table_canvas : public layout_proxy {
     public:

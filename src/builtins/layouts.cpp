@@ -266,15 +266,15 @@ namespace animgui {
             parent.pop_region();
         }
 
-        const auto scroll_scale = 3.0f * style.default_font->height();  // TODO: read from system
-
         if(parent.region_hovered()) {
+            const auto [scroll_x, scroll_y] = input.scroll_factor();
+
             if(std::fabs(input.scroll().x) > 1e-3f) {
-                offset_x += input.scroll().x / size.x * w * scroll_scale;
+                offset_x += input.scroll().x / size.x * w * scroll_x * style.default_font->standard_width();
                 scrolling_x = scrolling_delay;
             }
             if(std::fabs(input.scroll().y) > 1e-3f) {
-                offset_y += input.scroll().y / size.y * h * scroll_scale;
+                offset_y += input.scroll().y / size.y * h * scroll_y * style.default_font->height();
                 scrolling_y = scrolling_delay;
             }
         }
