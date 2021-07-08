@@ -42,15 +42,16 @@ namespace animgui {
             const auto back = style.panel_background;
             const auto front = select_button_color(item.status, style);
             const auto unused = vec2{ 0.0f, 0.0f };
+
             commands.push_back(
-                { clip_rect,
+                { render_rect, clip_rect,
                   primitives{ primitive_type::triangle_strip,
                               { { { p0, unused, back }, { p1, unused, back }, { p3, unused, back }, { p2, unused, back } },
                                 commands.get_allocator().resource() },
                               nullptr,
                               0.0f } });
             commands.push_back(
-                { clip_rect,
+                { render_rect, clip_rect,
                   primitives{ primitive_type::line_loop,
                               { { { p0, unused, front }, { p1, unused, front }, { p2, unused, front }, { p3, unused, front } },
                                 commands.get_allocator().resource() },
@@ -72,7 +73,7 @@ namespace animgui {
             const auto p0 = vec2{ render_rect.left, render_rect.top }, p1 = vec2{ render_rect.left, render_rect.bottom },
                        p2 = vec2{ render_rect.right, render_rect.bottom }, p3 = vec2{ render_rect.right, render_rect.top };
             const auto unused = vec2{ 0.0f, 0.0f };
-            commands.push_back({ clip_rect,
+            commands.push_back({ render_rect, clip_rect,
                                  primitives{ primitive_type::line_loop,
                                              { { { p0, unused, item.color },
                                                  { p1, unused, item.color },
@@ -91,10 +92,14 @@ namespace animgui {
             auto rect = item.bounds;
             if(!clip_bounds(rect, offset, clip_rect))
                 return;
+
+            auto render_rect = item.bounds;
+            offset_bounds(render_rect, offset);
+
             const auto p0 = vec2{ rect.left, rect.top }, p1 = vec2{ rect.left, rect.bottom },
                        p2 = vec2{ rect.right, rect.bottom }, p3 = vec2{ rect.right, rect.top };
             const auto unused = vec2{ 0.0f, 0.0f };
-            commands.push_back({ clip_rect,
+            commands.push_back({ render_rect, clip_rect,
                                  primitives{ primitive_type::triangle_strip,
                                              { { { p0, unused, item.color },
                                                  { p1, unused, item.color },
@@ -110,17 +115,20 @@ namespace animgui {
         static void emit(const canvas_line& item, const bounds_aabb& clip_rect, const vec2 offset,
                          std::pmr::vector<command>& commands, const style&,
                          const std::function<texture_region(font&, glyph_id)>&) {
-            if(auto rect = bounds_aabb{ std::fmin(item.start.x, item.end.x) - item.size / 2.0f,
-                                        std::fmax(item.start.x, item.end.x) + item.size / 2.0f,
-                                        std::fmin(item.start.y, item.end.y) - item.size / 2.0f,
-                                        std::fmax(item.start.y, item.end.y) + item.size / 2.0f };
-               !clip_bounds(rect, offset, clip_rect))
+            auto rect = bounds_aabb{ std::fmin(item.start.x, item.end.x) - item.size / 2.0f,
+                                     std::fmax(item.start.x, item.end.x) + item.size / 2.0f,
+                                     std::fmin(item.start.y, item.end.y) - item.size / 2.0f,
+                                     std::fmax(item.start.y, item.end.y) + item.size / 2.0f };
+            auto render_rect = rect;
+            if(!clip_bounds(rect, offset, clip_rect))
                 return;
+            offset_bounds(render_rect, offset);
+
             const auto p0 = vec2{ offset.x + item.start.x, offset.y + item.start.y },
                        p1 = vec2{ offset.x + item.end.x, offset.y + item.end.y };
             const auto unused = vec2{ 0.0f, 0.0f };
             commands.push_back(
-                { clip_rect,
+                { render_rect, clip_rect,
                   primitives{ primitive_type::lines,
                               { { { p0, unused, item.color }, { p1, unused, item.color } }, commands.get_allocator().resource() },
                               nullptr,
@@ -132,12 +140,15 @@ namespace animgui {
         static void emit(const canvas_point& item, const bounds_aabb& clip_rect, const vec2 offset,
                          std::pmr::vector<command>& commands, const style&,
                          const std::function<texture_region(font&, glyph_id)>&) {
-            if(auto rect = bounds_aabb{ item.pos.x - item.size / 2.0f, item.pos.x + item.size / 2.0f,
-                                        item.pos.y - item.size / 2.0f, item.pos.y + item.size / 2.0f };
-               !clip_bounds(rect, offset, clip_rect))
+            auto rect = bounds_aabb{ item.pos.x - item.size / 2.0f, item.pos.x + item.size / 2.0f, item.pos.y - item.size / 2.0f,
+                                     item.pos.y + item.size / 2.0f };
+            auto render_rect = rect;
+            if(!clip_bounds(rect, offset, clip_rect))
                 return;
+            offset_bounds(render_rect, offset);
+
             const auto unused = vec2{ 0.0f, 0.0f };
-            commands.push_back({ clip_rect,
+            commands.push_back({ render_rect, clip_rect,
                                  primitives{ primitive_type::points,
                                              { { { { item.pos.x + offset.x, item.pos.y + offset.y }, unused, item.color } },
                                                commands.get_allocator().resource() },
@@ -158,7 +169,7 @@ namespace animgui {
             const auto p0 = vec2{ render_rect.left, render_rect.top }, p1 = vec2{ render_rect.left, render_rect.bottom },
                        p2 = vec2{ render_rect.right, render_rect.bottom }, p3 = vec2{ render_rect.right, render_rect.top };
             const auto [s0, s1, t0, t1] = item.tex.region;
-            commands.push_back({ clip_rect,
+            commands.push_back({ render_rect, clip_rect,
                                  primitives{ primitive_type::triangle_strip,
                                              { { { p0, { s0, t0 }, item.factor },
                                                  { p1, { s0, t1 }, item.factor },
@@ -205,7 +216,7 @@ namespace animgui {
                                    p2 = vec2{ render_bounds.right, render_bounds.bottom },
                                    p3 = vec2{ render_bounds.right, render_bounds.top };
                         const auto [s0, s1, t0, t1] = tex.region;
-                        commands.push_back({ clip_rect,
+                        commands.push_back({ render_bounds, clip_rect,
                                              primitives{ primitive_type::triangle_strip,
                                                          { { { p0, { s0, t0 }, item.color },
                                                              { p1, { s0, t1 }, item.color },

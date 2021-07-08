@@ -68,11 +68,16 @@ namespace animgui {
     inline bool clip_bounds(bounds_aabb& sub, const vec2 offset, const bounds_aabb& parent) {
         offset_bounds(sub, offset);
 
-        sub.left = std::max(sub.left, parent.left);
-        sub.top = std::max(sub.top, parent.top);
-        sub.right = std::min(sub.right, parent.right);
-        sub.bottom = std::min(sub.bottom, parent.bottom);
+        sub.left = std::fmax(sub.left, parent.left);
+        sub.top = std::fmax(sub.top, parent.top);
+        sub.right = std::fmin(sub.right, parent.right);
+        sub.bottom = std::fmin(sub.bottom, parent.bottom);
         return sub.left < sub.right && sub.top < sub.bottom;
+    }
+
+    inline bool intersect_bounds(const bounds_aabb& lhs, const bounds_aabb& rhs) {
+        return std::fmax(lhs.left, rhs.left) < std::fmin(lhs.right, rhs.right) &&
+            std::fmax(lhs.top, rhs.top) < std::fmin(lhs.bottom, rhs.bottom);
     }
     struct identifier final {
         uint64_t id;

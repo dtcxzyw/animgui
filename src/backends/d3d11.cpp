@@ -207,6 +207,10 @@ namespace animgui {
         ID3D11BlendState* m_blend_state = nullptr;
         ID3D11DepthStencilState* m_depth_stencil_state = nullptr;
 
+        bool m_dirty = false;
+        bool m_scissor_restricted = false;
+        ID3D11ShaderResourceView* m_bind_tex = nullptr;
+
         void check_d3d_error(const HRESULT res) const {
             if(res != S_OK)
                 m_error_checker(res);
@@ -232,8 +236,15 @@ namespace animgui {
             m_device_context->Unmap(m_vertex_buffer, 0);
         }
 
-        static void emit(const native_callback& callback, const bounds_aabb& clip, vec2) {
-            callback(clip);
+        void make_dirty() {
+            m_dirty = true;
+            m_scissor_restricted = true;
+            m_bind_tex = reinterpret_cast<ID3D11ShaderResourceView*>(std::numeric_limits<size_t>::max());
+        }
+
+        void emit(const native_callback& callback, vec2) {
+            callback();
+            make_dirty();
         }
         static D3D11_PRIMITIVE_TOPOLOGY get_primitive_type(const primitive_type type) noexcept {
             // ReSharper disable once CppDefaultCaseNotHandledInSwitchStatement CppIncompleteSwitchStatement
@@ -246,29 +257,30 @@ namespace animgui {
             return static_cast<D3D11_PRIMITIVE_TOPOLOGY>(0);
         }
 
-        void emit(const primitives& primitives, const bounds_aabb& clip, const vec2 window_size) {
+        void emit(const primitives& primitives, const vec2 window_size) {
             auto&& [type, vertices, tex, point_line_size] = primitives;
 
-            m_device_context->RSSetState(m_rasterizer_state);
-            const LONG left = static_cast<int>(std::floor(clip.left));
-            const LONG right = static_cast<int>(std::ceil(clip.right));
-            const LONG bottom = static_cast<int>(std::ceil(clip.bottom));
-            const LONG top = static_cast<int>(std::floor(clip.top));
-            const D3D11_RECT clip_rect{ left, top, right, bottom };
-            m_device_context->RSSetScissorRects(1, &clip_rect);
+            if(m_dirty) {
+                m_device_context->RSSetState(m_rasterizer_state);
 
-            const float blend_factor[4] = { 0.f, 0.f, 0.f, 0.f };
-            m_device_context->OMSetBlendState(m_blend_state, blend_factor, 0xFFFFFFFF);
-            m_device_context->OMSetDepthStencilState(m_depth_stencil_state, 0);
-            m_device_context->VSSetShader(m_vertex_shader, nullptr, 0);
-            m_device_context->VSSetConstantBuffers(0, 1, &m_constant_buffer);
-            m_device_context->PSSetShader(m_pixel_shader, nullptr, 0);
-            m_device_context->PSSetConstantBuffers(0, 1, &m_constant_buffer);
-            m_device_context->IASetInputLayout(m_input_layout);
-            m_device_context->GSSetShader(nullptr, nullptr, 0);
-            m_device_context->HSSetShader(nullptr, nullptr, 0);
-            m_device_context->DSSetShader(nullptr, nullptr, 0);
-            m_device_context->CSSetShader(nullptr, nullptr, 0);
+                const float blend_factor[4] = { 0.f, 0.f, 0.f, 0.f };
+                m_device_context->OMSetBlendState(m_blend_state, blend_factor, 0xFFFFFFFF);
+                m_device_context->OMSetDepthStencilState(m_depth_stencil_state, 0);
+                m_device_context->VSSetShader(m_vertex_shader, nullptr, 0);
+                m_device_context->VSSetConstantBuffers(0, 1, &m_constant_buffer);
+                m_device_context->PSSetShader(m_pixel_shader, nullptr, 0);
+                m_device_context->PSSetConstantBuffers(0, 1, &m_constant_buffer);
+                m_device_context->IASetInputLayout(m_input_layout);
+                m_device_context->GSSetShader(nullptr, nullptr, 0);
+                m_device_context->HSSetShader(nullptr, nullptr, 0);
+                m_device_context->DSSetShader(nullptr, nullptr, 0);
+                m_device_context->CSSetShader(nullptr, nullptr, 0);
+
+                m_device_context->PSSetSamplers(0, 1, &m_sampler_state);
+
+                m_dirty = false;
+            }
+
             update_vertex_buffer(primitives.vertices);
             uint32_t stride = sizeof(vertex);
             uint32_t offset = 0;
@@ -283,8 +295,9 @@ namespace animgui {
                 uniform.mode = (tex ? (tex->channels() == channel::alpha ? 1 : 0) : 2);
                 m_device_context->Unmap(m_constant_buffer, 0);
             }
+
             m_device_context->IASetPrimitiveTopology(get_primitive_type(type));
-            m_device_context->PSSetSamplers(0, 1, &m_sampler_state);
+
             if(tex) {
                 tex->generate_mipmap();
                 const auto texture_srv = reinterpret_cast<ID3D11ShaderResourceView*>(tex->native_handle());
@@ -404,11 +417,30 @@ namespace animgui {
             m_window_size = { static_cast<float>(window_size.x), static_cast<float>(window_size.y) };
             m_command_list = std::move(command_list);
         }
-        void emit(uvec2 screen_size) override {
+        void emit(const uvec2 screen_size) override {
+            make_dirty();
+            m_scissor_restricted = true;
+
             // ReSharper disable once CppUseStructuredBinding
             for(auto&& command : m_command_list) {
-                auto&& clip = command.clip;
-                std::visit([&](auto&& item) { emit(item, clip, m_window_size); }, command.desc);
+                if(command.clip.has_value()) {
+                    auto&& clip = command.clip.value();
+                    const LONG left = static_cast<int>(std::floor(clip.left));
+                    const LONG right = static_cast<int>(std::ceil(clip.right));
+                    const LONG bottom = static_cast<int>(std::ceil(clip.bottom));
+                    const LONG top = static_cast<int>(std::floor(clip.top));
+                    const D3D11_RECT clip_rect{ left, top, right, bottom };
+                    m_device_context->RSSetScissorRects(1, &clip_rect);
+                    m_scissor_restricted = true;
+                } else {
+                    if(m_scissor_restricted) {
+                        const D3D11_RECT clip_rect{ 0, 0, static_cast<LONG>(screen_size.x), static_cast<LONG>(screen_size.y) };
+                        m_device_context->RSSetScissorRects(1, &clip_rect);
+                        m_scissor_restricted = false;
+                    }
+                }
+
+                std::visit([&](auto&& item) { emit(item, m_window_size); }, command.desc);
             }
         }
         std::shared_ptr<texture> create_texture(uvec2 size, channel channels) override {

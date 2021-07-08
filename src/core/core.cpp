@@ -449,7 +449,7 @@ namespace animgui {
         }
 
         void transform(std::pmr::vector<command>& command_list) const {
-            for(auto& [_, desc] : command_list)
+            for(auto& [_, __, desc] : command_list)
                 if(desc.index() == 1) {
                     // ReSharper disable once CppTooWideScope
                     auto&& [type, vertices, _, point_line_size] = std::get<primitives>(desc);
@@ -510,7 +510,7 @@ namespace animgui {
               m_emitter{ emitter }, m_animator{ animator }, m_command_optimizer{ command_optimizer },
               m_image_compactor{ image_compactor }, m_state_manager{ memory_resource }, m_codepoint_locator{ image_compactor,
                                                                                                              memory_resource },
-              m_command_fallback_translator{ render_backend.supported_primitives() },
+              m_command_fallback_translator{ render_backend.supported_primitives() & command_optimizer.supported_primitives() },
               m_memory_resource{ memory_resource }, m_style{} {
             set_classic_style(*this);
         }
@@ -537,9 +537,9 @@ namespace animgui {
                                                 [&](font& font_ref, const glyph_id glyph) -> texture_region {
                                                     return m_codepoint_locator.locate(font_ref, glyph);
                                                 });
-            auto optimized_commands = m_command_optimizer.optimize(std::move(commands));
-            m_command_fallback_translator.transform(optimized_commands);
-            m_render_backend.update_command_list(uvec2{ width, height }, std::move(optimized_commands));
+            m_command_fallback_translator.transform(commands);
+            auto optimized_commands = m_command_optimizer.optimize({ width, height }, std::move(commands));
+            m_render_backend.update_command_list({ width, height }, std::move(optimized_commands));
         }
         texture_region load_image(const image_desc& image, const float max_scale) override {
             return m_image_compactor.compact(image, max_scale);

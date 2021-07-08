@@ -134,6 +134,10 @@ namespace animgui {
         texture_impl m_empty;
         vec2 m_window_size;
 
+        bool m_dirty = false;
+        bool m_scissor_restricted = false;
+        GLuint m_bind_tex = 0;
+
         static void check_compile_errors(const GLuint shader, const std::string_view type) {
             GLint success;
             std::array<GLchar, 1024> buffer = {};
@@ -171,20 +175,31 @@ namespace animgui {
             return 0;
         }
 
-        static void emit(const native_callback& callback, const bounds_aabb& clip, vec2) {
-            callback(clip);
+        void make_dirty() {
+            m_dirty = true;
+            m_scissor_restricted = true;
+            m_bind_tex = std::numeric_limits<uint32_t>::max();
         }
 
-        void emit(const primitives& primitives, const bounds_aabb&, const vec2 size) {
-            auto&& [type, vertices, tex, point_line_size] = primitives;
-            glEnable(GL_BLEND);
-            glDisable(GL_DEPTH_TEST);
-            glDisable(GL_CULL_FACE);
-            glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-            glBlendEquation(GL_FUNC_ADD);
+        void emit(const native_callback& callback, vec2) {
+            callback();
+            make_dirty();
+        }
 
-            glUseProgram(m_program_id);
-            glUniform2f(glGetUniformLocation(m_program_id, "size"), size.x, size.y);
+        void emit(const primitives& primitives, const vec2 size) {
+            auto&& [type, vertices, tex, point_line_size] = primitives;
+
+            if(m_dirty) {
+                glEnable(GL_BLEND);
+                glDisable(GL_DEPTH_TEST);
+                glDisable(GL_CULL_FACE);
+                glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+                glBlendEquation(GL_FUNC_ADD);
+
+                glUseProgram(m_program_id);
+                glUniform2f(glGetUniformLocation(m_program_id, "size"), size.x, size.y);
+                m_dirty = false;
+            }
 
             glBindBuffer(GL_ARRAY_BUFFER, m_vbo);
             glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(vertex), vertices.data(), GL_STREAM_DRAW);
@@ -193,9 +208,11 @@ namespace animgui {
             glBindVertexArray(m_vao);
             glActiveTexture(GL_TEXTURE0);
 
-            auto cmd_tex = tex ? tex.get() : &m_empty;
-            cmd_tex->generate_mipmap();
-            glBindTexture(GL_TEXTURE_2D, static_cast<GLuint>(cmd_tex->native_handle()));
+            if(auto cmd_tex = tex ? tex.get() : &m_empty; static_cast<GLuint>(cmd_tex->native_handle()) != m_bind_tex) {
+                cmd_tex->generate_mipmap();
+                m_bind_tex = static_cast<GLuint>(cmd_tex->native_handle());
+                glBindTexture(GL_TEXTURE_2D, m_bind_tex);
+            }
 
             glDrawArrays(get_mode(type), 0, static_cast<uint32_t>(vertices.size()));
         }
@@ -264,17 +281,28 @@ namespace animgui {
 
         void emit(const uvec2 screen_size) override {
             glEnable(GL_SCISSOR_TEST);
+            make_dirty();
+            m_scissor_restricted = true;
 
             // ReSharper disable once CppUseStructuredBinding
             for(auto&& command : m_command_list) {
-                auto&& clip = command.clip;
-                const int left = static_cast<int>(std::floor(clip.left));
-                const int right = static_cast<int>(std::ceil(clip.right));
-                const int bottom = static_cast<int>(std::ceil(clip.bottom));
-                const int top = static_cast<int>(std::floor(clip.top));
+                if(command.clip.has_value()) {
+                    const auto clip = command.clip.value();
+                    const int left = static_cast<int>(std::floor(clip.left));
+                    const int right = static_cast<int>(std::ceil(clip.right));
+                    const int bottom = static_cast<int>(std::ceil(clip.bottom));
+                    const int top = static_cast<int>(std::floor(clip.top));
 
-                glScissor(left, screen_size.y - bottom, right - left, bottom - top);
-                std::visit([&](auto&& item) { emit(item, clip, m_window_size); }, command.desc);
+                    glScissor(left, screen_size.y - bottom, right - left, bottom - top);
+                    m_scissor_restricted = true;
+                } else {
+                    if(m_scissor_restricted) {
+                        glScissor(0, 0, screen_size.x, screen_size.y);
+                        m_scissor_restricted = false;
+                    }
+                }
+
+                std::visit([&](auto&& item) { emit(item, m_window_size); }, command.desc);
             }
         }
         [[nodiscard]] primitive_type supported_primitives() const noexcept override {

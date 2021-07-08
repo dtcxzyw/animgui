@@ -4,6 +4,7 @@
 #include "common.hpp"
 
 #include <functional>
+#include <optional>
 #include <variant>
 #include <vector>
 
@@ -17,7 +18,6 @@ namespace animgui {
     };
 
     class texture {
-
     public:
         texture() = default;
         texture(const texture&) = delete;
@@ -33,13 +33,13 @@ namespace animgui {
         [[nodiscard]] virtual uint64_t native_handle() const noexcept = 0;
     };
 
-    struct texture_region final {
+    struct ANIMGUI_API texture_region final {
         std::shared_ptr<texture> tex;
         bounds_aabb region;
         [[nodiscard]] texture_region sub_region(const bounds_aabb& bounds) const;
     };
 
-    using native_callback = std::function<void(const bounds_aabb&)>;
+    using native_callback = std::function<void()>;
 
     enum class primitive_type : uint32_t {
         points = 1 << 0,
@@ -54,6 +54,10 @@ namespace animgui {
 
     constexpr primitive_type operator|(const primitive_type lhs, const primitive_type rhs) {
         return static_cast<primitive_type>(static_cast<uint32_t>(lhs) | static_cast<uint32_t>(rhs));
+    }
+
+    constexpr primitive_type operator&(const primitive_type lhs, const primitive_type rhs) {
+        return static_cast<primitive_type>(static_cast<uint32_t>(lhs) & static_cast<uint32_t>(rhs));
     }
 
     constexpr bool support_primitive(const primitive_type capability, const primitive_type requirement) {
@@ -75,7 +79,8 @@ namespace animgui {
     };
 
     struct command final {
-        bounds_aabb clip;
+        bounds_aabb bounds;
+        std::optional<bounds_aabb> clip;
         std::variant<native_callback, primitives> desc;
 
         command() = delete;
