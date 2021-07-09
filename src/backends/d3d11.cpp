@@ -244,7 +244,7 @@ namespace animgui {
             m_bind_tex = reinterpret_cast<ID3D11ShaderResourceView*>(std::numeric_limits<size_t>::max());
         }
 
-        void emit(const native_callback& callback, vec2) {
+        void emit(const native_callback& callback, vec2, uint32_t&) {
             callback();
             make_dirty();
         }
@@ -259,7 +259,7 @@ namespace animgui {
             return static_cast<D3D11_PRIMITIVE_TOPOLOGY>(0);
         }
 
-        void emit(const primitives& primitives, const vec2 window_size) {
+        void emit(const primitives& primitives, const vec2 window_size, uint32_t& vertices_offset) {
             auto&& [type, vertices, tex, point_line_size] = primitives;
 
             if(m_dirty) {
@@ -280,13 +280,12 @@ namespace animgui {
 
                 m_device_context->PSSetSamplers(0, 1, &m_sampler_state);
 
+                uint32_t stride = sizeof(vertex);
+                uint32_t offset = 0;
+                m_device_context->IASetVertexBuffers(0, 1, &m_vertex_buffer, &stride, &offset);
+
                 m_dirty = false;
             }
-
-            update_vertex_buffer(primitives.vertices);
-            uint32_t stride = sizeof(vertex);
-            uint32_t offset = 0;
-            m_device_context->IASetVertexBuffers(0, 1, &m_vertex_buffer, &stride, &offset);
 
             {
                 // TODO: lazy update
@@ -301,12 +300,16 @@ namespace animgui {
             m_device_context->IASetPrimitiveTopology(get_primitive_type(type));
 
             if(tex) {
-                tex->generate_mipmap();
                 const auto texture_srv = reinterpret_cast<ID3D11ShaderResourceView*>(tex->native_handle());
-                m_device_context->PSSetShaderResources(0, 1, &texture_srv);
+                if(m_bind_tex != texture_srv) {
+                    tex->generate_mipmap();
+                    m_device_context->PSSetShaderResources(0, 1, &texture_srv);
+                    m_bind_tex = texture_srv;
+                }
             }
 
-            m_device_context->Draw(static_cast<uint32_t>(vertices.size()), 0);
+            m_device_context->Draw(static_cast<uint32_t>(vertices.size()), vertices_offset);
+            vertices_offset += vertices.size();
         }
 
     public:
@@ -425,6 +428,17 @@ namespace animgui {
             make_dirty();
             m_scissor_restricted = true;
 
+            {
+                std::pmr::vector<vertex> vertices{ m_command_list.get_allocator().resource() };
+
+                for(auto&& command : m_command_list)
+                    if(const auto item = std::get_if<primitives>(&command.desc))
+                        vertices.insert(vertices.cend(), item->vertices.cbegin(), item->vertices.cend());
+
+                update_vertex_buffer(vertices);
+            }
+            uint32_t vertices_offset = 0;
+
             // ReSharper disable once CppUseStructuredBinding
             for(auto&& command : m_command_list) {
                 if(command.clip.has_value()) {
@@ -444,7 +458,7 @@ namespace animgui {
                     }
                 }
 
-                std::visit([&](auto&& item) { emit(item, m_window_size); }, command.desc);
+                std::visit([&](auto&& item) { emit(item, m_window_size, vertices_offset); }, command.desc);
             }
 
             const auto tp2 = current_time();

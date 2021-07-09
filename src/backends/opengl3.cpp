@@ -183,12 +183,12 @@ namespace animgui {
             m_bind_tex = std::numeric_limits<uint32_t>::max();
         }
 
-        void emit(const native_callback& callback, vec2) {
+        void emit(const native_callback& callback, vec2, uint32_t&) {
             callback();
             make_dirty();
         }
 
-        void emit(const primitives& primitives, const vec2 size) {
+        void emit(const primitives& primitives, const vec2 size, uint32_t& vertices_offset) {
             auto&& [type, vertices, tex, point_line_size] = primitives;
 
             if(m_dirty) {
@@ -200,15 +200,15 @@ namespace animgui {
 
                 glUseProgram(m_program_id);
                 glUniform2f(glGetUniformLocation(m_program_id, "size"), size.x, size.y);
+                glBindBuffer(GL_ARRAY_BUFFER, m_vbo);
+                glBindVertexArray(m_vao);
+                glActiveTexture(GL_TEXTURE0);
+
                 m_dirty = false;
             }
 
-            glBindBuffer(GL_ARRAY_BUFFER, m_vbo);
-            glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(vertex), vertices.data(), GL_STREAM_DRAW);
             if(type == primitive_type::points)
                 glPointSize(point_line_size);
-            glBindVertexArray(m_vao);
-            glActiveTexture(GL_TEXTURE0);
 
             if(auto cmd_tex = tex ? tex.get() : &m_empty; static_cast<GLuint>(cmd_tex->native_handle()) != m_bind_tex) {
                 cmd_tex->generate_mipmap();
@@ -216,7 +216,8 @@ namespace animgui {
                 glBindTexture(GL_TEXTURE_2D, m_bind_tex);
             }
 
-            glDrawArrays(get_mode(type), 0, static_cast<uint32_t>(vertices.size()));
+            glDrawArrays(get_mode(type), vertices_offset, static_cast<uint32_t>(vertices.size()));
+            vertices_offset += static_cast<uint32_t>(vertices.size());
         }
 
     public:
@@ -288,6 +289,18 @@ namespace animgui {
             make_dirty();
             m_scissor_restricted = true;
 
+            {
+                std::pmr::vector<vertex> vertices{ m_command_list.get_allocator().resource() };
+
+                for(auto&& command : m_command_list)
+                    if(const auto item = std::get_if<primitives>(&command.desc))
+                        vertices.insert(vertices.cend(), item->vertices.cbegin(), item->vertices.cend());
+
+                glBindBuffer(GL_ARRAY_BUFFER, m_vbo);
+                glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(vertex), vertices.data(), GL_STREAM_DRAW);
+            }
+            uint32_t vertices_offset = 0;
+
             // ReSharper disable once CppUseStructuredBinding
             for(auto&& command : m_command_list) {
                 if(command.clip.has_value()) {
@@ -306,7 +319,7 @@ namespace animgui {
                     }
                 }
 
-                std::visit([&](auto&& item) { emit(item, m_window_size); }, command.desc);
+                std::visit([&](auto&& item) { emit(item, m_window_size, vertices_offset); }, command.desc);
             }
 
             const auto tp2 = current_time();
