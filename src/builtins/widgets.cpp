@@ -304,9 +304,8 @@ namespace animgui {
                                                        style.action.selected });
             }
 
-            parent.input().set_input_candidate_window(
-                parent.region_bounds(),
-                parent.region_offset() + vec2{ start_pos, style.padding.y + style.default_font->height() * 0.5f });
+            parent.input().set_input_candidate_window(parent.region_offset() +
+                                                      vec2{ start_pos, style.padding.y + style.default_font->height() * 0.5f });
         }
 
         parent.push_region("text_region"_id,

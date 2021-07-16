@@ -237,8 +237,7 @@ namespace animgui {
         vec2 m_direction;
         clock::time_point m_last_time;
         vec2 m_direction_navigation;
-
-        bounds_aabb m_imm_bounds;
+        
         vec2 m_imm_anchor;
 
         const std::function<void()>& m_redraw;
@@ -273,7 +272,7 @@ namespace animgui {
             : m_window{ window }, m_scroll_factor{ 0.0f, 0.0f }, m_cursor_pos{ 0.0f, 0.0f },
               m_mouse_move{ 0.0f, 0.0f }, m_scroll{ 0.0f, 0.0f }, m_key_state{}, m_key_state_pulse{},
               m_key_state_pulse_repeated{}, m_input_mode{ input_mode::mouse }, m_cursor{ cursor::arrow }, m_game_pad_state{},
-              m_direction{ 0.0f, 0.0f }, m_direction_navigation{ 0.0f, 0.0f }, m_imm_bounds{ 0.0f, 0.0f, 0.0f, 0.0f },
+              m_direction{ 0.0f, 0.0f }, m_direction_navigation{ 0.0f, 0.0f },
               m_imm_anchor{ 0.0f, 0.0f }, m_redraw{ redraw }, m_input_time{ 0 } {
             m_available_game_pad.reserve(std::size(m_game_pad_state));
             glfwSetWindowUserPointer(m_window, this);
@@ -372,8 +371,7 @@ namespace animgui {
         [[nodiscard]] vec2 scroll_factor() const noexcept override {
             return m_scroll_factor;
         }
-        void set_input_candidate_window(const bounds_aabb bounds, const vec2 pos) override {
-            m_imm_bounds = bounds;
+        void set_input_candidate_window(const vec2 pos) override {
             m_imm_anchor = pos;
         }
         void new_frame() override {
@@ -384,19 +382,14 @@ namespace animgui {
                 const auto handle = glfwGetWin32Window(m_window);
                 const auto imm = ImmGetContext(handle);
 
-                CANDIDATEFORM desc{ 0, CFS_EXCLUDE, POINT{ static_cast<LONG>(m_imm_anchor.x), static_cast<LONG>(m_imm_anchor.y) },
-                                    RECT {
-                                        static_cast<LONG>(std::floor(m_imm_bounds.left)),
-                                        static_cast<LONG>(std::floor(m_imm_bounds.top)),
-                                        static_cast<LONG>(std::ceil(m_imm_bounds.right)),
-                                        static_cast<LONG>(std::ceil(m_imm_bounds.bottom))
-                                    } };
-
-                ImmSetCandidateWindow(imm, &desc);
+                COMPOSITIONFORM desc{ CFS_FORCE_POSITION,
+                                      POINT{ static_cast<LONG>(m_imm_anchor.x), static_cast<LONG>(m_imm_anchor.y) },
+                                      {} };
+                //ImmSetCompositionFontW();
+                ImmSetCompositionWindow(imm, &desc);
                 ImmReleaseContext(handle, imm);
 
                 m_imm_anchor = { 0.0f, 0.0f };
-                m_imm_bounds = { 0.0f, 0.0f, 0.0f, 0.0f };
             }
 #endif
 
