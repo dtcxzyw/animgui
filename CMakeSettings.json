@@ -30,6 +30,11 @@
           "name": "BACKEND_D3D11",
           "value": "True",
           "type": "BOOL"
+        },
+        {
+          "name": "BACKEND_VULKAN",
+          "value": "True",
+          "type": "BOOL"
         }
       ]
     },
@@ -61,6 +66,11 @@
         },
         {
           "name": "BACKEND_D3D11",
+          "value": "True",
+          "type": "BOOL"
+        },
+        {
+          "name": "BACKEND_VULKAN",
           "value": "True",
           "type": "BOOL"
         }

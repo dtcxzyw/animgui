@@ -97,6 +97,9 @@ namespace animgui {
         void update_texture(const uvec2 offset, const image_desc& image) override {
             if(image.channels != m_channel)
                 throw std::runtime_error{ "mismatched channel" };
+            if(image.size.x == 0 || image.size.y == 0)
+                return;
+
             glBindTexture(GL_TEXTURE_2D, m_id);
             glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
             glTexSubImage2D(GL_TEXTURE_2D, 0, offset.x, offset.y, image.size.x, image.size.y, m_format, GL_UNSIGNED_BYTE,
@@ -183,12 +186,12 @@ namespace animgui {
             m_bind_tex = std::numeric_limits<uint32_t>::max();
         }
 
-        void emit(const native_callback& callback, vec2, uint32_t&) {
+        void emit(const native_callback& callback, uint32_t&) {
             callback();
             make_dirty();
         }
 
-        void emit(const primitives& primitives, const vec2 size, uint32_t& vertices_offset) {
+        void emit(const primitives& primitives, uint32_t& vertices_offset) {
             auto&& [type, vertices, tex, point_line_size] = primitives;
 
             if(m_dirty) {
@@ -199,7 +202,7 @@ namespace animgui {
                 glBlendEquation(GL_FUNC_ADD);
 
                 glUseProgram(m_program_id);
-                glUniform2f(glGetUniformLocation(m_program_id, "size"), size.x, size.y);
+                glUniform2f(glGetUniformLocation(m_program_id, "size"), m_window_size.x, m_window_size.y);
                 glBindBuffer(GL_ARRAY_BUFFER, m_vbo);
                 glBindVertexArray(m_vao);
                 glActiveTexture(GL_TEXTURE0);
@@ -319,7 +322,7 @@ namespace animgui {
                     }
                 }
 
-                std::visit([&](auto&& item) { emit(item, m_window_size, vertices_offset); }, command.desc);
+                std::visit([&](auto&& item) { emit(item, vertices_offset); }, command.desc);
             }
 
             const auto tp2 = current_time();

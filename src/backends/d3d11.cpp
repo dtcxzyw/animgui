@@ -32,15 +32,11 @@ namespace animgui {
                 m_error_checker(res);
         }
 
-        [[nodiscard]] uint32_t calc_mip_levels() const {
-            return static_cast<uint32_t>(std::floor(std::log2(std::min(m_size.x, m_size.y))));
-        }
-
         void create_texture_srv(ID3D11Device* device) {
             D3D11_SHADER_RESOURCE_VIEW_DESC desc;
             desc.Format = get_format(m_channel);
             desc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
-            desc.Texture2D.MipLevels = calc_mip_levels();
+            desc.Texture2D.MipLevels = calculate_mipmap_level(m_size);
             desc.Texture2D.MostDetailedMip = 0;
             check_d3d_error(device->CreateShaderResourceView(m_texture, &desc, &m_texture_srv));
         }
@@ -57,7 +53,7 @@ namespace animgui {
               m_size{ size }, m_own{ true }, m_dirty{ false }, m_error_checker{ error_checker } {
             D3D11_TEXTURE2D_DESC desc{ size.x,
                                        size.y,
-                                       calc_mip_levels(),
+                                       calculate_mipmap_level(size),
                                        1,
                                        get_format(channel),
                                        DXGI_SAMPLE_DESC{ 1, 0 },
@@ -450,12 +446,10 @@ namespace animgui {
                     const D3D11_RECT clip_rect{ left, top, right, bottom };
                     m_device_context->RSSetScissorRects(1, &clip_rect);
                     m_scissor_restricted = true;
-                } else {
-                    if(m_scissor_restricted) {
-                        const D3D11_RECT clip_rect{ 0, 0, static_cast<LONG>(screen_size.x), static_cast<LONG>(screen_size.y) };
-                        m_device_context->RSSetScissorRects(1, &clip_rect);
-                        m_scissor_restricted = false;
-                    }
+                } else if(m_scissor_restricted) {
+                    const D3D11_RECT clip_rect{ 0, 0, static_cast<LONG>(screen_size.x), static_cast<LONG>(screen_size.y) };
+                    m_device_context->RSSetScissorRects(1, &clip_rect);
+                    m_scissor_restricted = false;
                 }
 
                 std::visit([&](auto&& item) { emit(item, m_window_size, vertices_offset); }, command.desc);

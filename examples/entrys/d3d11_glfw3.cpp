@@ -4,8 +4,6 @@
 #include "../application.hpp"
 #include <GLFW/glfw3.h>
 #define GLFW_EXPOSE_NATIVE_WIN32
-#include "animgui/core/input_backend.hpp"
-
 #include <GLFW/glfw3native.h>
 #include <animgui/backends/d3d11.hpp>
 #include <animgui/backends/glfw3.hpp>
@@ -16,13 +14,14 @@
 #include <animgui/builtins/image_compactors.hpp>
 #include <animgui/builtins/layouts.hpp>
 #include <animgui/core/context.hpp>
+#include <animgui/core/input_backend.hpp>
 #include <d3d11.h>
 #include <iostream>
 #include <string>
 
 [[noreturn]] void fail(const std::string& str) {
     std::cout << str << std::endl;
-    std::terminate();
+    std::quick_exit(EXIT_FAILURE);
 }
 
 void check_d3d11_error(const HRESULT res) {
@@ -41,7 +40,7 @@ int main() {
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
 
     int w = 1024, h = 768;
-    GLFWwindow* const window = glfwCreateWindow(w, h, "Animgui demo ( d3d11_glfw3 )", nullptr, nullptr);
+    GLFWwindow* const window = glfwCreateWindow(w, h, "Animgui demo (d3d11_glfw3)", nullptr, nullptr);
     int screen_w, screen_h;
     glfwGetMonitorWorkarea(glfwGetPrimaryMonitor(), nullptr, nullptr, &screen_w, &screen_h);
     glfwSetWindowPos(window, (screen_w - w) / 2, (screen_h - h) / 2);

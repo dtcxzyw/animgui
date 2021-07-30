@@ -44,6 +44,9 @@ namespace animgui {
     };
     struct uvec2 final {
         uint32_t x, y;
+        [[nodiscard]] constexpr bool operator!=(const uvec2 rhs) const noexcept {
+            return x != rhs.x || y != rhs.y;
+        }
     };
     struct bounds_aabb final {
         float left, right, top, bottom;
@@ -142,6 +145,11 @@ namespace animgui {
     template <typename T, typename U>
     static constexpr void* offset(U T::*ptr) {
         return &(reinterpret_cast<T*>(0)->*ptr);
+    }
+
+    template <typename T, typename U>
+    static constexpr uint32_t offset_u32(U T::*ptr) {
+        return static_cast<uint32_t>(reinterpret_cast<size_t>(&(reinterpret_cast<T*>(0)->*ptr)));
     }
 
     using timer = std::chrono::high_resolution_clock;

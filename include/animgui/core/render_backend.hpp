@@ -9,6 +9,11 @@
 #include <vector>
 
 namespace animgui {
+
+    inline uint32_t calculate_mipmap_level(const uvec2 size) {
+        return static_cast<uint32_t>(std::floor(std::log2(std::max(size.x, size.y)))) + 1;
+    }
+
     // TODO: SDF
     enum class channel : uint32_t { alpha = 0, rgb = 1, rgba = 2 };
     struct image_desc final {
