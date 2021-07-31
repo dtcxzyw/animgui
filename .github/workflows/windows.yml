@@ -18,7 +18,7 @@ jobs:
     
     - name: Install Dependencies
       run: |
-        wget https://sdk.lunarg.com/sdk/download/latest/windows/vulkan-sdk.exe
+        powershell -Command "Invoke-WebRequest https://sdk.lunarg.com/sdk/download/latest/windows/vulkan-sdk.exe -OutFile vulkan-sdk.exe"
         vulkan-sdk.exe /S
         vcpkg install glew:x64-windows glfw3:x64-windows utfcpp:x64-windows stb:x64-windows opengl:x64-windows
         vcpkg integrate install
