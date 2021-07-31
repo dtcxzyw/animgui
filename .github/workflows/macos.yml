@@ -18,6 +18,10 @@ jobs:
     
     - name: Install Dependencies
       run: |
+        wget https://sdk.lunarg.com/sdk/download/1.2.182.0/mac/vulkansdk-macos-1.2.182.0.dmg
+        hdiutil attach vulkansdk-macos-1.2.182.0.dmg
+        sudo /Volumes/vulkansdk-macos-1.2.182.0/InstallVulkan.app/Contents/MacOS/InstallVulkan --root ${{github.workspace}}/Vulkan --accept-licenses --default-answer --confirm-command install
+        hdiutil detach /Volumes/vulkansdk-macos-1.2.182.0/
         vcpkg install glew:x64-osx glfw3:x64-osx utfcpp:x64-osx stb:x64-osx opengl:x64-osx vulkan:x64-osx
         vcpkg integrate install
 

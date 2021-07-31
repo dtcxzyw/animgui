@@ -18,7 +18,10 @@ jobs:
     
     - name: Install Dependencies
       run: |
-        vcpkg install glew:x64-windows glfw3:x64-windows utfcpp:x64-windows stb:x64-windows opengl:x64-windows vulkan:x64-windows
+        powershell (new-object System.Net.WebClient).DownloadFile('https://sdk.lunarg.com/sdk/download/latest/windows/vulkan-sdk.exe','${{github.workspace}}/vulkan-sdk.exe')
+        ${{github.workspace}}/vulkan-sdk.exe /S
+        vcpkg install glew:x64-windows glfw3:x64-windows utfcpp:x64-windows stb:x64-windows opengl:x64-windows
+        vcpkg install vulkan:x64-windows
         vcpkg integrate install
 
     - name: Configure CMake
