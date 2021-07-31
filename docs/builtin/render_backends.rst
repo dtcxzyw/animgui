@@ -43,11 +43,12 @@ Vulkan后端
     // device: Vulkan逻辑设备
     // render_pass: Vulkan渲染Pass，用于创建渲染流水线
     // command_buffer: 当前指令缓冲，用于提交绘制指令，请在emit前绑定好render_pass
+    // sample_count: MSAA采样数
+    // sample_shading: 参见 https://www.khronos.org/registry/vulkan/specs/1.2/html/vkspec.html#primsrast-sampleshading
     // synchronized_transfer: 同步指令执行回调，用于纹理阻塞更新。请确保所提交的queue支持transfer
     // error_report: 内部Vulkan错误回调
-    ANIMGUI_API std::shared_ptr<render_backend> create_vulkan_backend(vk::PhysicalDevice& physical_device, vk::Device& device,
-                                                                    vk::RenderPass& render_pass,
-                                                                    vk::CommandBuffer& command_buffer,
-                                                                    synchronized_executor synchronized_transfer,
-                                                                    std::function<void(vk::Result)> error_report);
+    ANIMGUI_API std::shared_ptr<render_backend>
+    create_vulkan_backend(vk::PhysicalDevice& physical_device, vk::Device& device, vk::RenderPass& render_pass,
+                          vk::CommandBuffer& command_buffer, vk::SampleCountFlagBits sample_count, float sample_shading,
+                          synchronized_executor synchronized_transfer, std::function<void(vk::Result)> error_report);
                                                                     

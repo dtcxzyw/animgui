@@ -57,12 +57,14 @@ namespace animgui {
         vk::UniqueImage m_image;
         vk::UniqueDeviceMemory m_image_memory;
         vk::UniqueImageView m_image_view;
+        uint32_t m_mip_level;
+
         bool m_dirty = false;
         bool m_first_update = true;
 
         static vk::Format get_format(const channel channel) noexcept {
-            return channel == channel::alpha ? vk::Format::eR8Unorm :
-                                               (channel == channel::rgb ? vk::Format::eR8G8B8Unorm : vk::Format::eR8G8B8A8Unorm);
+            return channel == channel::alpha ? vk::Format::eR8Srgb :
+                                               (channel == channel::rgb ? vk::Format::eR8G8B8Srgb : vk::Format::eR8G8B8A8Srgb);
         }
 
         static uint32_t get_pixel_size(const channel channel) noexcept {
@@ -75,7 +77,7 @@ namespace animgui {
             }
         }
 
-        void create_image_view(const vk::Image image, const vk::Format format, const uint32_t mip_level) {
+        void create_image_view(const vk::Image image, const vk::Format format) {
             const auto color_mapping = m_channel == channel::alpha ? vk::ComponentSwizzle::eOne : vk::ComponentSwizzle::eIdentity;
             const auto alpha_mapping = m_channel == channel::alpha ?
                 vk::ComponentSwizzle::eR :
@@ -86,7 +88,7 @@ namespace animgui {
                                          vk::ImageViewType::e2D,
                                          format,
                                          vk::ComponentMapping{ color_mapping, color_mapping, color_mapping, alpha_mapping },
-                                         vk::ImageSubresourceRange{ vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1 } });
+                                         vk::ImageSubresourceRange{ vk::ImageAspectFlagBits::eColor, 0, m_mip_level, 0, 1 } });
         }
 
     public:
@@ -94,39 +96,41 @@ namespace animgui {
                      std::function<void(vk::Result)>& error_report, const vk::PhysicalDeviceMemoryProperties& memory_prop,
                      const uvec2 size, const channel image_channel)
             : m_size{ size }, m_channel{ image_channel }, m_device{ device }, m_memory_prop{ memory_prop },
-              m_synchronized_transfer{ synchronized_transfer }, m_error_report{ error_report } {
+              m_synchronized_transfer{ synchronized_transfer }, m_error_report{ error_report }, m_mip_level{
+                  calculate_mipmap_level(size)
+              } {
             const auto format = get_format(image_channel);
-            const auto mip_level = calculate_mipmap_level(size);
 
-            m_image = device.createImageUnique(
-                vk::ImageCreateInfo{ {},
-                                     vk::ImageType::e2D,
-                                     format,
-                                     vk::Extent3D{ size.x, size.y, 1 },
-                                     1,
-                                     1,
-                                     vk::SampleCountFlagBits::e1,
-                                     vk::ImageTiling::eOptimal,
-                                     vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eTransferDst,
-                                     vk::SharingMode::eExclusive,
-                                     {},
-                                     {},
-                                     vk::ImageLayout::eUndefined });
+            m_image = device.createImageUnique(vk::ImageCreateInfo{
+                {},
+                vk::ImageType::e2D,
+                format,
+                vk::Extent3D{ size.x, size.y, 1 },
+                m_mip_level,
+                1,
+                vk::SampleCountFlagBits::e1,
+                vk::ImageTiling::eOptimal,
+                vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eTransferSrc,
+                vk::SharingMode::eExclusive,
+                {},
+                {},
+                vk::ImageLayout::eUndefined });
             const auto requirements = device.getImageMemoryRequirements(m_image.get());
             m_image_memory = device.allocateMemoryUnique(vk::MemoryAllocateInfo{
                 requirements.size,
                 find_memory_index(memory_prop, requirements.memoryTypeBits, vk::MemoryPropertyFlagBits::eDeviceLocal) });
             device.bindImageMemory(m_image.get(), m_image_memory.get(), 0);
-            create_image_view(m_image.get(), format, mip_level);
+            create_image_view(m_image.get(), format);
         }
         texture_impl(vk::Device& device, const synchronized_executor& synchronized_transfer,
                      std::function<void(vk::Result)>& error_report, const vk::PhysicalDeviceMemoryProperties& memory_prop,
                      const vk::Image image, const uvec2 size, const channel image_channel)
             : m_size{ size }, m_channel{ image_channel }, m_device{ device }, m_memory_prop{ memory_prop },
-              m_synchronized_transfer{ synchronized_transfer }, m_error_report{ error_report } {
+              m_synchronized_transfer{ synchronized_transfer }, m_error_report{ error_report }, m_mip_level{
+                  calculate_mipmap_level(size)
+              } {
             const auto format = get_format(image_channel);
-            const auto mip_level = calculate_mipmap_level(size);
-            create_image_view(image, format, mip_level);
+            create_image_view(image, format);
         }
 
         void update_texture(const uvec2 offset, const image_desc& image) override {
@@ -143,17 +147,20 @@ namespace animgui {
 
             m_synchronized_transfer([&](vk::CommandBuffer& cmd) {
                 const vk::ImageMemoryBarrier enter{
-                    m_first_update ? vk::AccessFlagBits::eNoneKHR : vk::AccessFlagBits::eShaderRead,
+                    m_first_update ? vk::AccessFlagBits::eNoneKHR :
+                                     (m_dirty ? vk::AccessFlagBits::eTransferWrite : vk::AccessFlagBits::eShaderRead),
                     vk::AccessFlagBits::eTransferWrite,
-                    m_first_update ? vk::ImageLayout::eUndefined : vk::ImageLayout::eShaderReadOnlyOptimal,
+                    m_first_update ? vk::ImageLayout::eUndefined :
+                                     (m_dirty ? vk::ImageLayout::eTransferDstOptimal : vk::ImageLayout::eShaderReadOnlyOptimal),
                     vk::ImageLayout::eTransferDstOptimal,
                     VK_QUEUE_FAMILY_IGNORED,
                     VK_QUEUE_FAMILY_IGNORED,
                     m_image.get(),
-                    vk::ImageSubresourceRange{ vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1 }
+                    vk::ImageSubresourceRange{ vk::ImageAspectFlagBits::eColor, 0, m_mip_level, 0, 1 }
                 };
                 cmd.pipelineBarrier(m_first_update ? vk::PipelineStageFlagBits::eTopOfPipe :
-                                                     vk::PipelineStageFlagBits::eFragmentShader,
+                                                     (m_dirty ? vk::PipelineStageFlagBits::eTransfer :
+                                                                vk::PipelineStageFlagBits::eFragmentShader),
                                     vk::PipelineStageFlagBits::eTransfer, {}, 0, nullptr, 0, nullptr, 1, &enter);
 
                 const vk::BufferImageCopy region{ 0,
@@ -165,17 +172,6 @@ namespace animgui {
                                                   vk::Extent3D{ image.size.x, image.size.y, 1 } };
                 cmd.copyBufferToImage(temp_staging_buffer.first.get(), m_image.get(), vk::ImageLayout::eTransferDstOptimal, 1,
                                       &region);
-
-                const vk::ImageMemoryBarrier exit{ vk::AccessFlagBits::eTransferWrite,
-                                                   vk::AccessFlagBits::eShaderRead,
-                                                   vk::ImageLayout::eTransferDstOptimal,
-                                                   vk::ImageLayout::eShaderReadOnlyOptimal,
-                                                   VK_QUEUE_FAMILY_IGNORED,
-                                                   VK_QUEUE_FAMILY_IGNORED,
-                                                   m_image.get(),
-                                                   vk::ImageSubresourceRange{ vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1 } };
-                cmd.pipelineBarrier(vk::PipelineStageFlagBits::eTransfer, vk::PipelineStageFlagBits::eFragmentShader, {}, 0,
-                                    nullptr, 0, nullptr, 1, &exit);
             });
 
             m_first_update = false;
@@ -183,9 +179,64 @@ namespace animgui {
         }
 
         void generate_mipmap() override {
-            if(m_dirty) {
-                m_dirty = false;
-            }
+            if(!m_dirty)
+                return;
+
+            m_synchronized_transfer([&](vk::CommandBuffer& cmd) {
+                vk::ImageMemoryBarrier barrier{ {},
+                                                {},
+                                                {},
+                                                {},
+                                                VK_QUEUE_FAMILY_IGNORED,
+                                                VK_QUEUE_FAMILY_IGNORED,
+                                                m_image.get(),
+                                                vk::ImageSubresourceRange{ vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1 } };
+
+                int32_t width = m_size.x;
+                int32_t height = m_size.y;
+
+                for(uint32_t i = 1; i < m_mip_level; ++i) {
+                    barrier.subresourceRange.baseMipLevel = i - 1;
+                    barrier.oldLayout = vk::ImageLayout::eTransferDstOptimal;
+                    barrier.newLayout = vk::ImageLayout::eTransferSrcOptimal;
+                    barrier.srcAccessMask = vk::AccessFlagBits::eTransferWrite;
+                    barrier.dstAccessMask = vk::AccessFlagBits::eTransferRead;
+
+                    cmd.pipelineBarrier(vk::PipelineStageFlagBits::eTransfer, vk::PipelineStageFlagBits::eTransfer, {}, 0,
+                                        nullptr, 0, nullptr, 1, &barrier);
+                    const auto next_width = std::max(1, width / 2);
+                    const auto next_height = std::max(1, height / 2);
+
+                    const vk::ImageBlit blit{ { vk::ImageAspectFlagBits::eColor, i - 1, 0, 1 },
+                                              { { { 0, 0, 0 }, { width, height, 1 } } },
+                                              { vk::ImageAspectFlagBits::eColor, i, 0, 1 },
+                                              { { { 0, 0, 0 }, { next_width, next_height, 1 } } } };
+
+                    cmd.blitImage(m_image.get(), vk::ImageLayout::eTransferSrcOptimal, m_image.get(),
+                                  vk::ImageLayout::eTransferDstOptimal, 1, &blit, vk::Filter::eLinear);
+
+                    barrier.oldLayout = vk::ImageLayout::eTransferSrcOptimal;
+                    barrier.newLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+                    barrier.srcAccessMask = vk::AccessFlagBits::eTransferRead;
+                    barrier.dstAccessMask = vk::AccessFlagBits::eShaderRead;
+
+                    cmd.pipelineBarrier(vk::PipelineStageFlagBits::eTransfer, vk::PipelineStageFlagBits::eFragmentShader, {}, 0,
+                                        nullptr, 0, nullptr, 1, &barrier);
+
+                    width = next_width;
+                    height = next_height;
+                }
+
+                barrier.subresourceRange.baseMipLevel = m_mip_level - 1;
+                barrier.oldLayout = vk::ImageLayout::eTransferDstOptimal;
+                barrier.newLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+                barrier.srcAccessMask = vk::AccessFlagBits::eTransferWrite;
+                barrier.dstAccessMask = vk::AccessFlagBits::eShaderRead;
+                cmd.pipelineBarrier(vk::PipelineStageFlagBits::eTransfer, vk::PipelineStageFlagBits::eFragmentShader, {}, 0,
+                                    nullptr, 0, nullptr, 1, &barrier);
+            });
+
+            m_dirty = false;
         }
 
         [[nodiscard]] uvec2 texture_size() const noexcept override {
@@ -410,8 +461,22 @@ namespace animgui {
 
             m_vert = device.createShaderModuleUnique(vk::ShaderModuleCreateInfo{ {}, sizeof(vert_spv), vert_spv });
             m_frag = device.createShaderModuleUnique(vk::ShaderModuleCreateInfo{ {}, sizeof(frag_spv), frag_spv });
-            m_sampler = device.createSamplerUnique(
-                vk::SamplerCreateInfo{ {}, vk::Filter::eLinear, vk::Filter::eLinear, vk::SamplerMipmapMode::eLinear });
+            m_sampler = device.createSamplerUnique(vk::SamplerCreateInfo{ {},
+                                                                          vk::Filter::eLinear,
+                                                                          vk::Filter::eLinear,
+                                                                          vk::SamplerMipmapMode::eLinear,
+                                                                          vk::SamplerAddressMode::eRepeat,
+                                                                          vk::SamplerAddressMode::eRepeat,
+                                                                          vk::SamplerAddressMode::eRepeat,
+                                                                          0.0f,
+                                                                          false,
+                                                                          0.0f,
+                                                                          false,
+                                                                          vk::CompareOp::eNever,
+                                                                          0.0f,
+                                                                          16.0f,
+                                                                          vk::BorderColor::eFloatTransparentBlack,
+                                                                          false });
             const vk::DescriptorSetLayoutBinding binding[] = { { 0, vk::DescriptorType::eCombinedImageSampler, 1,
                                                                  vk::ShaderStageFlagBits::eFragment, nullptr } };
             m_descriptor_set_layout = device.createDescriptorSetLayoutUnique(

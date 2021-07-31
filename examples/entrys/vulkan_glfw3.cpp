@@ -298,35 +298,35 @@ int main() {
                                                  vk::ImageSubresourceRange{ vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1 } }));
                 }
 
-                vk::AttachmentDescription color[] = { { {},
-                                                        selected_format.format,
-                                                        sample_count,
-                                                        vk::AttachmentLoadOp::eClear,
-                                                        vk::AttachmentStoreOp::eStore,
-                                                        vk::AttachmentLoadOp::eDontCare,
-                                                        vk::AttachmentStoreOp::eDontCare,
-                                                        vk::ImageLayout::eUndefined,
-                                                        vk::ImageLayout::eColorAttachmentOptimal },
-                                                      { {},
-                                                        selected_format.format,
-                                                        vk::SampleCountFlagBits::e1,
-                                                        vk::AttachmentLoadOp::eDontCare,
-                                                        vk::AttachmentStoreOp::eStore,
-                                                        vk::AttachmentLoadOp::eDontCare,
-                                                        vk::AttachmentStoreOp::eDontCare,
-                                                        vk::ImageLayout::eUndefined,
-                                                        vk::ImageLayout::ePresentSrcKHR } };
-                vk::AttachmentReference color_ref{ 0, vk::ImageLayout::eColorAttachmentOptimal };
-                vk::AttachmentReference color_resolve_ref{ 1, vk::ImageLayout::eColorAttachmentOptimal };
-                vk::SubpassDescription sub_pass{
-                    {}, vk::PipelineBindPoint::eGraphics, 0, nullptr, 1, &color_ref, &color_resolve_ref
+                const vk::AttachmentDescription color[] = { { {},
+                                                              selected_format.format,
+                                                              sample_count,
+                                                              vk::AttachmentLoadOp::eClear,
+                                                              vk::AttachmentStoreOp::eStore,
+                                                              vk::AttachmentLoadOp::eDontCare,
+                                                              vk::AttachmentStoreOp::eDontCare,
+                                                              vk::ImageLayout::eUndefined,
+                                                              vk::ImageLayout::eColorAttachmentOptimal },
+                                                            { {},
+                                                              selected_format.format,
+                                                              vk::SampleCountFlagBits::e1,
+                                                              vk::AttachmentLoadOp::eDontCare,
+                                                              vk::AttachmentStoreOp::eStore,
+                                                              vk::AttachmentLoadOp::eDontCare,
+                                                              vk::AttachmentStoreOp::eDontCare,
+                                                              vk::ImageLayout::eUndefined,
+                                                              vk::ImageLayout::ePresentSrcKHR } };
+                const vk::AttachmentReference color_ref{ 0, vk::ImageLayout::eColorAttachmentOptimal };
+                const vk::AttachmentReference color_resolve_ref{ 1, vk::ImageLayout::eColorAttachmentOptimal };
+                const vk::SubpassDescription sub_pass{
+                    {}, vk::PipelineBindPoint::eGraphics, 0, nullptr, 1, &color_ref, &color_resolve_ref, nullptr, 0, nullptr
                 };
-                vk::SubpassDependency dependency{ VK_SUBPASS_EXTERNAL,
-                                                  0,
-                                                  vk::PipelineStageFlagBits::eColorAttachmentOutput,
-                                                  vk::PipelineStageFlagBits::eColorAttachmentOutput,
-                                                  {},
-                                                  vk::AccessFlagBits::eColorAttachmentWrite };
+                const vk::SubpassDependency dependency{ VK_SUBPASS_EXTERNAL,
+                                                        0,
+                                                        vk::PipelineStageFlagBits::eColorAttachmentOutput,
+                                                        vk::PipelineStageFlagBits::eColorAttachmentOutput,
+                                                        {},
+                                                        vk::AccessFlagBits::eColorAttachmentWrite };
                 render_pass = device->createRenderPassUnique(
                     vk::RenderPassCreateInfo{ {}, static_cast<uint32_t>(std::size(color)), color, 1, &sub_pass, 1, &dependency });
                 for(auto&& image_view : swap_chain_image_views) {
@@ -380,9 +380,11 @@ int main() {
             images_in_flight[image_idx] = in_flight_fences[current_idx].get();
 
             check_vulkan_result(device->resetFences(1, &in_flight_fences[current_idx].get()));
-            vk::PipelineStageFlags stage = vk::PipelineStageFlagBits::eColorAttachmentOutput;
-            vk::SubmitInfo submit_info{ 1, &image_available_semaphores[current_idx].get(), &stage, 1, &current_command_buffer,
-                                        1, &render_finished_semaphores[current_idx].get() };
+            const vk::PipelineStageFlags stage = vk::PipelineStageFlagBits::eColorAttachmentOutput;
+            const vk::SubmitInfo submit_info{
+                1, &image_available_semaphores[current_idx].get(), &stage, 1, &current_command_buffer,
+                1, &render_finished_semaphores[current_idx].get()
+            };
             check_vulkan_result(queue.submit(1, &submit_info, in_flight_fences[current_idx].get()));
 
             check_vulkan_result(queue.presentKHR(
