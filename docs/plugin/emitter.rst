@@ -18,7 +18,7 @@
         // style: 风格设置
         // font_callback: 用于渲染文字时动态加载文字
         // 返回值：返回渲染后端识别的command，有point/line/triangle/quad等类型
-        virtual std::pmr::vector<command> transform(vec2 size, span<operation> operations, const style& style,
+        virtual command_queue transform(vec2 size, span<operation> operations, const style& style,
                                                     const std::function<texture_region(font&, glyph_id)>& font_callback) = 0;
 
         // 计算图元所占的大小，用于计算布局
