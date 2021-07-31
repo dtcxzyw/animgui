@@ -28,7 +28,7 @@ namespace animgui {
         return std::numeric_limits<uint32_t>::max();
     }
 
-    [[nodiscard]] buffer_pair allocate_buffer(vk::Device& device, vk::PhysicalDeviceMemoryProperties& memory_prop,
+    [[nodiscard]] buffer_pair allocate_buffer(vk::Device& device, const vk::PhysicalDeviceMemoryProperties& memory_prop,
                                               const size_t size, const vk::BufferUsageFlags usage,
                                               const vk::MemoryPropertyFlags property_flags) {
         vk::UniqueBuffer buffer = device.createBufferUnique(vk::BufferCreateInfo{ {}, static_cast<uint32_t>(size), usage });
@@ -50,7 +50,7 @@ namespace animgui {
         uvec2 m_size;
         channel m_channel;
         vk::Device& m_device;
-        vk::PhysicalDeviceMemoryProperties& m_memory_prop;
+        const vk::PhysicalDeviceMemoryProperties& m_memory_prop;
         const synchronized_executor& m_synchronized_transfer;
 
         std::function<void(vk::Result)>& m_error_report;
@@ -91,7 +91,7 @@ namespace animgui {
 
     public:
         texture_impl(vk::Device& device, const synchronized_executor& synchronized_transfer,
-                     std::function<void(vk::Result)>& error_report, vk::PhysicalDeviceMemoryProperties& memory_prop,
+                     std::function<void(vk::Result)>& error_report, const vk::PhysicalDeviceMemoryProperties& memory_prop,
                      const uvec2 size, const channel image_channel)
             : m_size{ size }, m_channel{ image_channel }, m_device{ device }, m_memory_prop{ memory_prop },
               m_synchronized_transfer{ synchronized_transfer }, m_error_report{ error_report } {
@@ -120,7 +120,7 @@ namespace animgui {
             create_image_view(m_image.get(), format, mip_level);
         }
         texture_impl(vk::Device& device, const synchronized_executor& synchronized_transfer,
-                     std::function<void(vk::Result)>& error_report, vk::PhysicalDeviceMemoryProperties& memory_prop,
+                     std::function<void(vk::Result)>& error_report, const vk::PhysicalDeviceMemoryProperties& memory_prop,
                      const vk::Image image, const uvec2 size, const channel image_channel)
             : m_size{ size }, m_channel{ image_channel }, m_device{ device }, m_memory_prop{ memory_prop },
               m_synchronized_transfer{ synchronized_transfer }, m_error_report{ error_report } {
@@ -205,6 +205,8 @@ namespace animgui {
         vk::Device& m_device;
         vk::RenderPass& m_render_pass;
         vk::CommandBuffer& m_command_buffer;
+        vk::SampleCountFlagBits m_sample_count;
+        float m_sample_shading;
         synchronized_executor m_synchronized_transfer;
 
         vk::UniqueShaderModule m_vert;
@@ -258,56 +260,59 @@ namespace animgui {
 
             const vec2 window_size = { static_cast<float>(m_window_size.x), static_cast<float>(m_window_size.y) };
             const vk::SpecializationMapEntry entries[] = { { 0, 0, sizeof(float) }, { 1, sizeof(float), sizeof(float) } };
-            vk::SpecializationInfo specialization_info{ static_cast<uint32_t>(std::size(entries)), entries, sizeof(vec2),
-                                                        &window_size };
+            const vk::SpecializationInfo specialization_info{ static_cast<uint32_t>(std::size(entries)), entries, sizeof(vec2),
+                                                              &window_size };
 
             const vk::PipelineShaderStageCreateInfo shader_desc[2] = {
                 { {}, vk::ShaderStageFlagBits::eVertex, m_vert.get(), "main", &specialization_info },
                 { {}, vk::ShaderStageFlagBits::eFragment, m_frag.get(), "main" }
             };
-            vk::VertexInputBindingDescription vertex_input_binding{ 0, sizeof(vertex), vk::VertexInputRate::eVertex };
-            vk::VertexInputAttributeDescription attributes[3] = {
+            const vk::VertexInputBindingDescription vertex_input_binding{ 0, sizeof(vertex), vk::VertexInputRate::eVertex };
+            const vk::VertexInputAttributeDescription attributes[3] = {
                 { 0, 0, vk::Format::eR32G32Sfloat, offset_u32(&vertex::pos) },
                 { 1, 0, vk::Format::eR32G32Sfloat, offset_u32(&vertex::tex_coord) },
                 { 2, 0, vk::Format::eR32G32B32A32Sfloat, offset_u32(&vertex::color) }
             };
-            vk::PipelineVertexInputStateCreateInfo vertex_input{
+            const vk::PipelineVertexInputStateCreateInfo vertex_input{
                 {}, 1, &vertex_input_binding, static_cast<uint32_t>(std::size(attributes)), attributes
             };
-            vk::PipelineInputAssemblyStateCreateInfo input_assembly{ {}, vk::PrimitiveTopology::eTriangleList, false };
-            vk::PipelineRasterizationStateCreateInfo rasterization_state{ {},
-                                                                          false,
-                                                                          false,
-                                                                          vk::PolygonMode::eFill,
-                                                                          vk::CullModeFlagBits::eNone,
-                                                                          vk::FrontFace::eCounterClockwise,
-                                                                          false,
-                                                                          0.0f,
-                                                                          0.0f,
-                                                                          0.0f,
-                                                                          1.0f };
-            vk::PipelineColorBlendAttachmentState color_blend_attachment_state{ true,
-                                                                                vk::BlendFactor::eSrcAlpha,
-                                                                                vk::BlendFactor::eOneMinusSrcAlpha,
-                                                                                vk::BlendOp::eAdd,
-                                                                                vk::BlendFactor::eOne,
-                                                                                vk::BlendFactor::eOneMinusSrcAlpha,
-                                                                                vk::BlendOp::eAdd,
-                                                                                vk::ColorComponentFlagBits::eR |
-                                                                                    vk::ColorComponentFlagBits::eG |
-                                                                                    vk::ColorComponentFlagBits::eB |
-                                                                                    vk::ColorComponentFlagBits::eA };
-            vk::PipelineMultisampleStateCreateInfo multiple_sampling_state{};  // TODO: MSAA
-            vk::PipelineColorBlendStateCreateInfo color_blend_state{
+            const vk::PipelineInputAssemblyStateCreateInfo input_assembly{ {}, vk::PrimitiveTopology::eTriangleList, false };
+            const vk::PipelineRasterizationStateCreateInfo rasterization_state{ {},
+                                                                                false,
+                                                                                false,
+                                                                                vk::PolygonMode::eFill,
+                                                                                vk::CullModeFlagBits::eNone,
+                                                                                vk::FrontFace::eCounterClockwise,
+                                                                                false,
+                                                                                0.0f,
+                                                                                0.0f,
+                                                                                0.0f,
+                                                                                1.0f };
+            const vk::PipelineColorBlendAttachmentState color_blend_attachment_state{ true,
+                                                                                      vk::BlendFactor::eSrcAlpha,
+                                                                                      vk::BlendFactor::eOneMinusSrcAlpha,
+                                                                                      vk::BlendOp::eAdd,
+                                                                                      vk::BlendFactor::eOne,
+                                                                                      vk::BlendFactor::eOneMinusSrcAlpha,
+                                                                                      vk::BlendOp::eAdd,
+                                                                                      vk::ColorComponentFlagBits::eR |
+                                                                                          vk::ColorComponentFlagBits::eG |
+                                                                                          vk::ColorComponentFlagBits::eB |
+                                                                                          vk::ColorComponentFlagBits::eA };
+            const vk::PipelineMultisampleStateCreateInfo multiple_sampling_state{
+                {}, m_sample_count, m_sample_shading > 0.0f, m_sample_shading
+            };
+            const vk::PipelineColorBlendStateCreateInfo color_blend_state{
                 {}, false, vk::LogicOp::eNoOp, 1, &color_blend_attachment_state
             };
-            vk::Viewport viewport{ 0.0f, 0.0f, static_cast<float>(screen_size.x), static_cast<float>(screen_size.y), 0.0f, 1.0f };
-            vk::Rect2D scissor{};
-            vk::PipelineViewportStateCreateInfo viewport_state{ {}, 1, &viewport, 1, &scissor };
-            vk::DynamicState dynamic_state[] = { vk::DynamicState::eScissor };
-            vk::PipelineDynamicStateCreateInfo dynamic_state_desc{ {},
-                                                                   static_cast<uint32_t>(std::size(dynamic_state)),
-                                                                   dynamic_state };
+            const vk::Viewport viewport{ 0.0f, 0.0f, static_cast<float>(screen_size.x), static_cast<float>(screen_size.y),
+                                         0.0f, 1.0f };
+            const vk::Rect2D scissor{};
+            const vk::PipelineViewportStateCreateInfo viewport_state{ {}, 1, &viewport, 1, &scissor };
+            const vk::DynamicState dynamic_state[] = { vk::DynamicState::eScissor };
+            const vk::PipelineDynamicStateCreateInfo dynamic_state_desc{ {},
+                                                                         static_cast<uint32_t>(std::size(dynamic_state)),
+                                                                         dynamic_state };
             const auto descriptor_layout = m_descriptor_set_layout.get();
             m_pipeline_layout = m_device.createPipelineLayoutUnique(vk::PipelineLayoutCreateInfo{ {}, 1, &descriptor_layout });
 
@@ -344,7 +349,7 @@ namespace animgui {
             m_bind_tex = reinterpret_cast<VkImageView>(std::numeric_limits<size_t>::max());
         }
 
-        vk::PhysicalDeviceMemoryProperties m_memory_prop;
+        const vk::PhysicalDeviceMemoryProperties m_memory_prop;
 
         buffer_pair m_vertex_buffer;
         size_t m_vertex_buffer_size = 0;
@@ -395,11 +400,13 @@ namespace animgui {
 
     public:
         render_backend_impl(vk::PhysicalDevice& physical_device, vk::Device& device, vk::RenderPass& render_pass,
-                            vk::CommandBuffer& command_buffer, synchronized_executor synchronized_transfer,
+                            vk::CommandBuffer& command_buffer, const vk::SampleCountFlagBits sample_count,
+                            const float sample_shading, synchronized_executor synchronized_transfer,
                             std::function<void(vk::Result)> error_report)
             : m_device{ device }, m_render_pass{ render_pass }, m_command_buffer{ command_buffer },
-              m_synchronized_transfer{ std::move(synchronized_transfer) }, m_error_report{ std::move(error_report) },
-              m_memory_prop{ physical_device.getMemoryProperties() } {
+              m_sample_count{ sample_count }, m_sample_shading{ sample_shading }, m_synchronized_transfer{ std::move(
+                                                                                      synchronized_transfer) },
+              m_error_report{ std::move(error_report) }, m_memory_prop{ physical_device.getMemoryProperties() } {
 
             m_vert = device.createShaderModuleUnique(vk::ShaderModuleCreateInfo{ {}, sizeof(vert_spv), vert_spv });
             m_frag = device.createShaderModuleUnique(vk::ShaderModuleCreateInfo{ {}, sizeof(frag_spv), frag_spv });
@@ -496,13 +503,13 @@ namespace animgui {
         }
     };
 
-    ANIMGUI_API std::shared_ptr<render_backend> create_vulkan_backend(vk::PhysicalDevice& physical_device, vk::Device& device,
-                                                                      vk::RenderPass& render_pass,
-                                                                      vk::CommandBuffer& command_buffer,
-                                                                      synchronized_executor synchronized_transfer,
-                                                                      std::function<void(vk::Result)> error_report) {
-        return std::make_shared<render_backend_impl>(physical_device, device, render_pass, command_buffer,
-                                                     std::move(synchronized_transfer), std::move(error_report));
+    ANIMGUI_API std::shared_ptr<render_backend>
+    create_vulkan_backend(vk::PhysicalDevice& physical_device, vk::Device& device, vk::RenderPass& render_pass,
+                          vk::CommandBuffer& command_buffer, const vk::SampleCountFlagBits sample_count,
+                          const float sample_shading, synchronized_executor synchronized_transfer,
+                          std::function<void(vk::Result)> error_report) {
+        return std::make_shared<render_backend_impl>(physical_device, device, render_pass, command_buffer, sample_count,
+                                                     sample_shading, std::move(synchronized_transfer), std::move(error_report));
     }
 
 }  // namespace animgui
