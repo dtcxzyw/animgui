@@ -218,7 +218,7 @@ namespace animgui {
             if(m_vertex_buffer_size < vertices.size()) {
                 if(m_vertex_buffer)
                     m_vertex_buffer->Release();
-                m_vertex_buffer_size = std::max(m_vertex_buffer_size, 1024ULL) * 2;
+                m_vertex_buffer_size = std::max(m_vertex_buffer_size, static_cast<size_t>(1024)) * 2;
                 const D3D11_BUFFER_DESC vertex_buffer_desc{ static_cast<uint32_t>(m_vertex_buffer_size * sizeof(vertex)),
                                                             D3D11_USAGE_DYNAMIC,
                                                             D3D11_BIND_VERTEX_BUFFER,

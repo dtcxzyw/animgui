@@ -27,7 +27,7 @@ jobs:
       run: |
         export CC=gcc-11
         export CXX=g++-11
-        export VULKAN_SDK=/Volumes/vulkansdk-macos-1.2.182.0/macOS
+        export Vulkan_INCLUDE_DIR=/Volumes/vulkansdk-macos-1.2.182.0/macOS/include
         cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -DCMAKE_TOOLCHAIN_FILE=/usr/local/share/vcpkg/scripts/buildsystems/vcpkg.cmake
 
     - name: Build

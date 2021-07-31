@@ -351,7 +351,7 @@ namespace animgui {
 
         void update_vertex_buffer(const std::pmr::vector<vertex>& vertices) {
             if(m_vertex_buffer_size < vertices.size()) {
-                m_vertex_buffer_size = std::max(m_vertex_buffer_size, 1024ULL) * 2;
+                m_vertex_buffer_size = std::max(m_vertex_buffer_size, static_cast<size_t>(1024)) * 2;
                 m_vertex_buffer = allocate_buffer(
                     m_device, m_memory_prop, m_vertex_buffer_size * sizeof(vertex), vk::BufferUsageFlagBits::eVertexBuffer,
                     vk::MemoryPropertyFlagBits::eHostCoherent | vk::MemoryPropertyFlagBits::eHostVisible);
