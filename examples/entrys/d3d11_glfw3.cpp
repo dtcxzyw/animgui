@@ -22,7 +22,7 @@
 
 [[noreturn]] void fail(const std::string& str) {
     std::cout << str << std::endl;
-    std::quick_exit(EXIT_FAILURE);
+    std::_Exit(EXIT_FAILURE);
 }
 
 void check_d3d11_error(const HRESULT res) {

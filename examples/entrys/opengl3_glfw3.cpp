@@ -19,7 +19,7 @@
 
 [[noreturn]] void fail(const std::string& str) {
     std::cout << str << std::endl;
-    std::quick_exit(EXIT_FAILURE);
+    std::_Exit(EXIT_FAILURE);
 }
 
 // refer to https://learnopengl.com/In-Practice/Debugging

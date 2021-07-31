@@ -13,7 +13,7 @@ jobs:
   build:
     runs-on: windows-latest
     env:
-      VULKAN_SDK=${{github.workspace}}/Vulkan
+      VULKAN_SDK: ${{github.workspace}}/Vulkan
     steps:
     - uses: actions/checkout@v2
     
