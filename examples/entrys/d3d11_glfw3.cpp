@@ -15,6 +15,7 @@
 #include <animgui/builtins/layouts.hpp>
 #include <animgui/core/context.hpp>
 #include <animgui/core/input_backend.hpp>
+#include <cstdlib>
 #include <d3d11.h>
 #include <iostream>
 #include <string>

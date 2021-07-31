@@ -13,6 +13,7 @@
 #include <animgui/builtins/layouts.hpp>
 #include <animgui/core/context.hpp>
 #include <animgui/core/input_backend.hpp>
+#include <cstdlib>
 #include <iostream>
 #include <string>
 
