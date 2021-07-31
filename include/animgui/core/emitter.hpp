@@ -74,7 +74,7 @@ namespace animgui {
         emitter& operator=(emitter&&) = default;
         virtual ~emitter() = default;
 
-        virtual std::pmr::vector<command> transform(vec2 size, span<operation> operations, const style& style,
+        virtual command_queue transform(vec2 size, span<operation> operations, const style& style,
                                                     const std::function<texture_region(font&, glyph_id)>& font_callback) = 0;
         virtual vec2 calculate_bounds(const primitive& primitive, const style& style) = 0;
     };

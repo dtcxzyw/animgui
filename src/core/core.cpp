@@ -390,20 +390,18 @@ namespace animgui {
             m_quad_emitter(vertices, p11, p21, p22, p12);
         }
 
-        void fallback_lines_adj(const std::pmr::vector<vertex>& input, std::pmr::vector<vertex>& output, const float line_width,
+        void fallback_lines_adj(const span<const vertex>& input, std::pmr::vector<vertex>& output, const float line_width,
                                 const bool make_loop) const {
             for(size_t i = 1; i < input.size(); ++i)
                 emit_line(output, input[i - 1], input[i], line_width);
             if(make_loop)
-                emit_line(output, input.back(), input.front(), line_width);
+                emit_line(output, input[input.size() - 1], input[0], line_width);
         }
-        void fallback_lines(const std::pmr::vector<vertex>& input, std::pmr::vector<vertex>& output,
-                            const float line_width) const {
+        void fallback_lines(const span<const vertex>& input, std::pmr::vector<vertex>& output, const float line_width) const {
             for(size_t i = 1; i < input.size(); i += 2)
                 emit_line(output, input[i - 1], input[i], line_width);
         }
-        void fallback_points(const std::pmr::vector<vertex>& input, std::pmr::vector<vertex>& output,
-                             const float point_size) const {
+        void fallback_points(const span<const vertex>& input, std::pmr::vector<vertex>& output, const float point_size) const {
             const auto offset = point_size * 0.5f;
             for(auto&& p0 : input) {
                 vertex p1 = p0, p2 = p0, p3 = p0, p4 = p0;
@@ -418,12 +416,12 @@ namespace animgui {
                 m_quad_emitter(output, p1, p2, p3, p4);
             }
         }
-        void fallback_quads(const std::pmr::vector<vertex>& input, std::pmr::vector<vertex>& output) const {
+        void fallback_quads(const span<const vertex>& input, std::pmr::vector<vertex>& output) const {
             for(size_t base = 0; base < input.size(); base += 4)
                 m_quad_emitter(output, input[base], input[base + 1], input[base + 2], input[base + 3]);
         }
 
-        static void fallback_triangle_strip(const std::pmr::vector<vertex>& input, std::pmr::vector<vertex>& output) {
+        static void fallback_triangle_strip(const span<const vertex>& input, std::pmr::vector<vertex>& output) {
             for(size_t i = 2; i < input.size(); ++i) {
                 if(i & 1)
                     emit_triangle(output, input[i], input[i - 1], input[i - 2]);
@@ -432,7 +430,7 @@ namespace animgui {
             }
         }
 
-        static void fallback_triangle_fan(const std::pmr::vector<vertex>& input, std::pmr::vector<vertex>& output) {
+        static void fallback_triangle_fan(const span<const vertex>& input, std::pmr::vector<vertex>& output) {
             for(size_t i = 2; i < input.size(); ++i)
                 emit_triangle(output, input[0], input[i - 1], input[i]);
         }
@@ -449,42 +447,53 @@ namespace animgui {
                 throw std::logic_error{ "Unsupported render backend" };
         }
 
-        void transform(std::pmr::vector<command>& command_list) const {
-            for(auto& [bounds, clip, desc] : command_list)
+        void transform(command_queue& command_list) const {
+            uint32_t vertices_offset = 0;
+            std::pmr::vector<vertex> output{ command_list.vertices.get_allocator().resource() };
+            output.reserve(command_list.vertices.size());
+
+            for(auto& [bounds, clip, desc] : command_list.commands)
                 if(desc.index() == 1) {
                     // ReSharper disable once CppTooWideScope
-                    auto&& [type, vertices, _, point_line_size] = std::get<primitives>(desc);
+                    auto&& [type, vertices_count, _, point_line_size] = std::get<primitives>(desc);
+                    span<const vertex> old{ command_list.vertices.data() + vertices_offset,
+                                            command_list.vertices.data() + vertices_offset + vertices_count };
+                    vertices_offset += vertices_count;
+
                     if(!support_primitive(m_supported_primitive, type)) {
-                        std::pmr::vector<vertex> output{ vertices.get_allocator().resource() };
-                        output.reserve(vertices.size() * 3);
+                        const auto old_size = output.size();
+
                         // ReSharper disable once CppDefaultCaseNotHandledInSwitchStatement CppIncompleteSwitchStatement
                         switch(type) {  // NOLINT(clang-diagnostic-switch)
                             case primitive_type::points:
-                                fallback_points(vertices, output, point_line_size);
+                                fallback_points(old, output, point_line_size);
                                 break;
                             case primitive_type::lines:
-                                fallback_lines(vertices, output, point_line_size);
+                                fallback_lines(old, output, point_line_size);
                                 break;
                             case primitive_type::line_strip:
-                                fallback_lines_adj(vertices, output, point_line_size, false);
+                                fallback_lines_adj(old, output, point_line_size, false);
                                 break;
                             case primitive_type::line_loop:
-                                fallback_lines_adj(vertices, output, point_line_size, true);
+                                fallback_lines_adj(old, output, point_line_size, true);
                                 break;
                             case primitive_type::triangle_fan:
-                                fallback_triangle_fan(vertices, output);
+                                fallback_triangle_fan(old, output);
                                 break;
                             case primitive_type::triangle_strip:
-                                fallback_triangle_strip(vertices, output);
+                                fallback_triangle_strip(old, output);
                                 break;
                             case primitive_type::quads:
-                                fallback_quads(vertices, output);
+                                fallback_quads(old, output);
                                 break;
                         }
                         type = m_fallback_primitive;
-                        vertices = std::move(output);
+                        vertices_count = static_cast<uint32_t>(output.size() - old_size);
+                    } else {
+                        output.insert(output.end(), old.begin(), old.end());
                     }
                 }
+            command_list.vertices = std::move(output);
         }
     };
 
@@ -578,23 +587,23 @@ namespace animgui {
             m_statistics.draw_time = profiler[0].add_sample(tp2 - tp1);
             m_statistics.generated_operation = static_cast<uint32_t>(canvas_root.commands().size());
 
-            auto commands = m_emitter.transform(canvas_root.reserved_size(), canvas_root.commands(), m_style,
-                                                [&](font& font_ref, const glyph_id glyph) -> texture_region {
-                                                    return m_codepoint_locator.locate(font_ref, glyph);
-                                                });
+            auto commands_queue = m_emitter.transform(canvas_root.reserved_size(), canvas_root.commands(), m_style,
+                                                      [&](font& font_ref, const glyph_id glyph) -> texture_region {
+                                                          return m_codepoint_locator.locate(font_ref, glyph);
+                                                      });
             const auto tp3 = current_time();
             m_statistics.emit_time = profiler[1].add_sample(tp3 - tp2);
-            m_statistics.emitted_draw_call = static_cast<uint32_t>(commands.size());
+            m_statistics.emitted_draw_call = static_cast<uint32_t>(commands_queue.commands.size());
 
-            m_command_fallback_translator.transform(commands);
+            m_command_fallback_translator.transform(commands_queue);
             const auto tp4 = current_time();
             m_statistics.fallback_time = profiler[2].add_sample(tp4 - tp3);
-            m_statistics.transformed_draw_call = static_cast<uint32_t>(commands.size());
+            m_statistics.transformed_draw_call = static_cast<uint32_t>(commands_queue.commands.size());
 
-            auto optimized_commands = m_command_optimizer.optimize({ width, height }, std::move(commands));
+            auto optimized_commands = m_command_optimizer.optimize({ width, height }, std::move(commands_queue));
             const auto tp5 = current_time();
             m_statistics.optimize_time = profiler[3].add_sample(tp5 - tp4);
-            m_statistics.optimized_draw_call = static_cast<uint32_t>(optimized_commands.size());
+            m_statistics.optimized_draw_call = static_cast<uint32_t>(optimized_commands.commands.size());
 
             m_render_backend.update_command_list({ width, height }, std::move(optimized_commands));
 

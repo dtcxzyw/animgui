@@ -74,11 +74,10 @@ namespace animgui {
         vec2 tex_coord;
         color_rgba color;
     };
-
-    // TODO: unique vertices buffer
+    
     struct primitives final {
         primitive_type type;
-        std::pmr::vector<vertex> vertices;
+        uint32_t vertices_count;
         std::shared_ptr<texture> tex;
         float point_line_size;
     };
@@ -91,6 +90,11 @@ namespace animgui {
         command() = delete;
     };
 
+    struct command_queue final {
+        std::pmr::vector<vertex> vertices;
+        std::pmr::vector<command> commands;
+    };
+
     class render_backend {
     public:
         render_backend() = default;
@@ -100,7 +104,7 @@ namespace animgui {
         render_backend& operator=(render_backend&&) = default;
         virtual ~render_backend() = default;
 
-        virtual void update_command_list(uvec2 window_size, std::pmr::vector<command> command_list) = 0;
+        virtual void update_command_list(uvec2 window_size, command_queue command_list) = 0;
         virtual std::shared_ptr<texture> create_texture(uvec2 size, channel channels) = 0;
         virtual std::shared_ptr<texture> create_texture_from_native_handle(uint64_t handle, uvec2 size, channel channels) = 0;
         virtual void emit(uvec2 screen_size) = 0;

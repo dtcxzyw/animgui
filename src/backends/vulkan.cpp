@@ -364,7 +364,7 @@ namespace animgui {
 
         void emit(const primitives& primitives, uint32_t& vertices_offset) {
             vk::CommandBuffer& cmd = m_command_buffer;
-            auto&& [type, vertices, tex, point_line_size] = primitives;
+            auto&& [type, vertices_count, tex, point_line_size] = primitives;
 
             if(m_dirty) {
                 cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, m_pipeline.get());
@@ -384,8 +384,8 @@ namespace animgui {
                                        nullptr);
             }
 
-            cmd.draw(static_cast<uint32_t>(vertices.size()), 1, vertices_offset, 0);
-            vertices_offset += vertices.size();
+            cmd.draw(vertices_count, 1, vertices_offset, 0);
+            vertices_offset += vertices_count;
         }
 
         void emit(const native_callback& callback, uint32_t&) {
@@ -425,9 +425,16 @@ namespace animgui {
             uint8_t data[4] = { 255, 255, 255, 255 };
             m_empty->update_texture(uvec2{ 0, 0 }, image_desc{ { 1, 1 }, channel::rgba, data });
         }
-        void update_command_list(const uvec2 window_size, std::pmr::vector<command> command_list) override {
+        void update_command_list(const uvec2 window_size, command_queue command_list) override {
             m_window_size = window_size;
-            m_command_list = std::move(command_list);
+
+            update_vertex_buffer(command_list.vertices);
+
+            m_command_list.clear();
+            m_command_list.reserve(command_list.commands.size());
+
+            for(auto&& command : command_list.commands)
+                m_command_list.push_back(std::move(command));
         }
         std::shared_ptr<texture> create_texture(uvec2 size, channel channels) override {
             return std::make_shared<texture_impl>(m_device, m_synchronized_transfer, m_error_report, m_memory_prop, size,
@@ -447,17 +454,7 @@ namespace animgui {
             const auto tp1 = current_time();
 
             make_dirty();
-            m_scissor_restricted = true;
 
-            {
-                std::pmr::vector<vertex> vertices{ m_command_list.get_allocator().resource() };
-                // ReSharper disable once CppUseStructuredBinding
-                for(auto&& command : m_command_list)
-                    if(const auto item = std::get_if<primitives>(&command.desc))
-                        vertices.insert(vertices.cend(), item->vertices.cbegin(), item->vertices.cend());
-
-                update_vertex_buffer(vertices);
-            }
             uint32_t vertices_offset = 0;
 
             vk::CommandBuffer& cmd = m_command_buffer;
@@ -474,7 +471,7 @@ namespace animgui {
                     const auto right = static_cast<int32_t>(std::ceil(clip.right * scale.x));
                     const auto bottom = static_cast<int32_t>(std::ceil(clip.bottom * scale.y));
                     const auto top = static_cast<int32_t>(std::floor(clip.top * scale.y));
-                    const vk::Rect2D scissor{ { left, static_cast<int32_t>(screen_size.y) - bottom },
+                    const vk::Rect2D scissor{ { left, top },
                                               { static_cast<uint32_t>(right - left), static_cast<uint32_t>(bottom - top) } };
                     cmd.setScissor(0, 1, &scissor);
                     m_scissor_restricted = true;

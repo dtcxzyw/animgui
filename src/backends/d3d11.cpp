@@ -240,7 +240,7 @@ namespace animgui {
             m_bind_tex = reinterpret_cast<ID3D11ShaderResourceView*>(std::numeric_limits<size_t>::max());
         }
 
-        void emit(const native_callback& callback, vec2, uint32_t&) {
+        void emit(const native_callback& callback, uint32_t&) {
             callback();
             make_dirty();
         }
@@ -255,8 +255,8 @@ namespace animgui {
             return static_cast<D3D11_PRIMITIVE_TOPOLOGY>(0);
         }
 
-        void emit(const primitives& primitives, const vec2 window_size, uint32_t& vertices_offset) {
-            auto&& [type, vertices, tex, point_line_size] = primitives;
+        void emit(const primitives& primitives, uint32_t& vertices_offset) {
+            auto&& [type, vertices_count, tex, point_line_size] = primitives;
 
             if(m_dirty) {
                 m_device_context->RSSetState(m_rasterizer_state);
@@ -288,7 +288,7 @@ namespace animgui {
                 D3D11_MAPPED_SUBRESOURCE mapped_resource;
                 check_d3d_error(m_device_context->Map(m_constant_buffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped_resource));
                 auto& uniform = *static_cast<constant_buffer*>(mapped_resource.pData);
-                uniform.size = { static_cast<float>(window_size.x), static_cast<float>(window_size.y) };
+                uniform.size = m_window_size;
                 uniform.mode = (tex ? (tex->channels() == channel::alpha ? 1 : 0) : 2);
                 m_device_context->Unmap(m_constant_buffer, 0);
             }
@@ -304,8 +304,8 @@ namespace animgui {
                 }
             }
 
-            m_device_context->Draw(static_cast<uint32_t>(vertices.size()), vertices_offset);
-            vertices_offset += vertices.size();
+            m_device_context->Draw(vertices_count, vertices_offset);
+            vertices_offset += vertices_count;
         }
 
     public:
@@ -414,9 +414,16 @@ namespace animgui {
             m_blend_state->Release();
             m_depth_stencil_state->Release();
         }
-        void update_command_list(const uvec2 window_size, std::pmr::vector<command> command_list) override {
+        void update_command_list(const uvec2 window_size, command_queue command_list) override {
             m_window_size = { static_cast<float>(window_size.x), static_cast<float>(window_size.y) };
-            m_command_list = std::move(command_list);
+
+            update_vertex_buffer(command_list.vertices);
+
+            m_command_list.clear();
+            m_command_list.reserve(command_list.commands.size());
+
+            for(auto&& command : command_list.commands)
+                m_command_list.push_back(std::move(command));
         }
         void emit(const uvec2 screen_size) override {
             const auto tp1 = current_time();
@@ -424,15 +431,6 @@ namespace animgui {
             make_dirty();
             m_scissor_restricted = true;
 
-            {
-                std::pmr::vector<vertex> vertices{ m_command_list.get_allocator().resource() };
-
-                for(auto&& command : m_command_list)
-                    if(const auto item = std::get_if<primitives>(&command.desc))
-                        vertices.insert(vertices.cend(), item->vertices.cbegin(), item->vertices.cend());
-
-                update_vertex_buffer(vertices);
-            }
             uint32_t vertices_offset = 0;
 
             const vec2 scale = { static_cast<float>(screen_size.x) / m_window_size.x,
@@ -455,7 +453,7 @@ namespace animgui {
                     m_scissor_restricted = false;
                 }
 
-                std::visit([&](auto&& item) { emit(item, m_window_size, vertices_offset); }, command.desc);
+                std::visit([&](auto&& item) { emit(item, vertices_offset); }, command.desc);
             }
 
             const auto tp2 = current_time();

@@ -192,7 +192,7 @@ namespace animgui {
         }
 
         void emit(const primitives& primitives, uint32_t& vertices_offset) {
-            auto&& [type, vertices, tex, point_line_size] = primitives;
+            auto&& [type, vertices_count, tex, point_line_size] = primitives;
 
             if(m_dirty) {
                 glEnable(GL_BLEND);
@@ -219,8 +219,8 @@ namespace animgui {
                 glBindTexture(GL_TEXTURE_2D, m_bind_tex);
             }
 
-            glDrawArrays(get_mode(type), vertices_offset, static_cast<uint32_t>(vertices.size()));
-            vertices_offset += static_cast<uint32_t>(vertices.size());
+            glDrawArrays(get_mode(type), vertices_offset, vertices_count);
+            vertices_offset += vertices_count;
         }
 
     public:
@@ -271,9 +271,18 @@ namespace animgui {
             glDeleteBuffers(1, &m_vbo);
         }
 
-        void update_command_list(const uvec2 window_size, std::pmr::vector<command> command_list) override {
+        void update_command_list(const uvec2 window_size, command_queue command_list) override {
             m_window_size = { static_cast<float>(window_size.x), static_cast<float>(window_size.y) };
-            m_command_list = std::move(command_list);
+
+            glBindBuffer(GL_ARRAY_BUFFER, m_vbo);
+            glBufferData(GL_ARRAY_BUFFER, command_list.vertices.size() * sizeof(vertex), command_list.vertices.data(),
+                         GL_STREAM_DRAW);
+
+            m_command_list.clear();
+            m_command_list.reserve(command_list.commands.size());
+
+            for(auto&& command : command_list.commands)
+                m_command_list.push_back(std::move(command));
         }
 
         std::shared_ptr<texture> create_texture(const uvec2 size, const channel channels) override {
@@ -292,16 +301,6 @@ namespace animgui {
             make_dirty();
             m_scissor_restricted = true;
 
-            {
-                std::pmr::vector<vertex> vertices{ m_command_list.get_allocator().resource() };
-
-                for(auto&& command : m_command_list)
-                    if(const auto item = std::get_if<primitives>(&command.desc))
-                        vertices.insert(vertices.cend(), item->vertices.cbegin(), item->vertices.cend());
-
-                glBindBuffer(GL_ARRAY_BUFFER, m_vbo);
-                glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(vertex), vertices.data(), GL_STREAM_DRAW);
-            }
             uint32_t vertices_offset = 0;
 
             const vec2 scale = { static_cast<float>(screen_size.x) / m_window_size.x,
