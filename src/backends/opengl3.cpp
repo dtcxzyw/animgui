@@ -304,14 +304,17 @@ namespace animgui {
             }
             uint32_t vertices_offset = 0;
 
+            const vec2 scale = { static_cast<float>(screen_size.x) / m_window_size.x,
+                                 static_cast<float>(screen_size.y) / m_window_size.y };
+
             // ReSharper disable once CppUseStructuredBinding
             for(auto&& command : m_command_list) {
                 if(command.clip.has_value()) {
                     const auto clip = command.clip.value();
-                    const int left = static_cast<int>(std::floor(clip.left));
-                    const int right = static_cast<int>(std::ceil(clip.right));
-                    const int bottom = static_cast<int>(std::ceil(clip.bottom));
-                    const int top = static_cast<int>(std::floor(clip.top));
+                    const int left = static_cast<int>(std::floor(clip.left * scale.x));
+                    const int right = static_cast<int>(std::ceil(clip.right * scale.x));
+                    const int bottom = static_cast<int>(std::ceil(clip.bottom * scale.y));
+                    const int top = static_cast<int>(std::floor(clip.top * scale.y));
 
                     glScissor(left, screen_size.y - bottom, right - left, bottom - top);
                     m_scissor_restricted = true;

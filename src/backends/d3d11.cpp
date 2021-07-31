@@ -435,14 +435,17 @@ namespace animgui {
             }
             uint32_t vertices_offset = 0;
 
+            const vec2 scale = { static_cast<float>(screen_size.x) / m_window_size.x,
+                                 static_cast<float>(screen_size.y) / m_window_size.y };
+
             // ReSharper disable once CppUseStructuredBinding
             for(auto&& command : m_command_list) {
                 if(command.clip.has_value()) {
                     auto&& clip = command.clip.value();
-                    const LONG left = static_cast<int>(std::floor(clip.left));
-                    const LONG right = static_cast<int>(std::ceil(clip.right));
-                    const LONG bottom = static_cast<int>(std::ceil(clip.bottom));
-                    const LONG top = static_cast<int>(std::floor(clip.top));
+                    const LONG left = static_cast<int>(std::floor(clip.left * scale.x));
+                    const LONG right = static_cast<int>(std::ceil(clip.right * scale.x));
+                    const LONG bottom = static_cast<int>(std::ceil(clip.bottom * scale.y));
+                    const LONG top = static_cast<int>(std::floor(clip.top * scale.y));
                     const D3D11_RECT clip_rect{ left, top, right, bottom };
                     m_device_context->RSSetScissorRects(1, &clip_rect);
                     m_scissor_restricted = true;

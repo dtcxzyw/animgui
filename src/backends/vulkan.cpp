@@ -462,15 +462,18 @@ namespace animgui {
 
             vk::CommandBuffer& cmd = m_command_buffer;
 
+            const vec2 scale = { static_cast<float>(screen_size.x) / m_window_size.x,
+                                 static_cast<float>(screen_size.y) / m_window_size.y };
+
             // ReSharper disable once CppUseStructuredBinding
             for(auto&& command : m_command_list) {
                 if(command.clip.has_value()) {
                     // ReSharper disable once CppUseStructuredBinding
                     auto&& clip = command.clip.value();
-                    const auto left = static_cast<int32_t>(std::floor(clip.left));
-                    const auto right = static_cast<int32_t>(std::ceil(clip.right));
-                    const auto bottom = static_cast<int32_t>(std::ceil(clip.bottom));
-                    const auto top = static_cast<int32_t>(std::floor(clip.top));
+                    const auto left = static_cast<int32_t>(std::floor(clip.left * scale.x));
+                    const auto right = static_cast<int32_t>(std::ceil(clip.right * scale.x));
+                    const auto bottom = static_cast<int32_t>(std::ceil(clip.bottom * scale.y));
+                    const auto top = static_cast<int32_t>(std::floor(clip.top * scale.y));
                     const vk::Rect2D scissor{ { left, static_cast<int32_t>(screen_size.y) - bottom },
                                               { static_cast<uint32_t>(right - left), static_cast<uint32_t>(bottom - top) } };
                     cmd.setScissor(0, 1, &scissor);
