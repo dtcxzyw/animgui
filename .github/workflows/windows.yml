@@ -18,13 +18,11 @@ jobs:
     
     - name: Install Dependencies
       run: |
-        powershell (new-object System.Net.WebClient).DownloadFile('https://sdk.lunarg.com/sdk/download/latest/windows/vulkan-sdk.exe','${{github.workspace}}/vulkan-sdk.exe')
-        ${{github.workspace}}/vulkan-sdk.exe /S /D=${{github.workspace}}/Vulkan
-        vcpkg install glew:x64-windows glfw3:x64-windows utfcpp:x64-windows stb:x64-windows opengl:x64-windows
+        vcpkg install glew:x64-windows glfw3:x64-windows utfcpp:x64-windows stb:x64-windows opengl:x64-windows vulkan:x64-windows
         vcpkg integrate install
 
     - name: Configure CMake
-      run: cmake -G "Visual Studio 16 2019" -A x64 -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -DCMAKE_TOOLCHAIN_FILE=C:/vcpkg/scripts/buildsystems/vcpkg.cmake -DVULKAN_SDK=${{github.workspace}}/Vulkan/
+      run: cmake -G "Visual Studio 16 2019" -A x64 -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -DCMAKE_TOOLCHAIN_FILE=C:/vcpkg/scripts/buildsystems/vcpkg.cmake
 
     - name: Build
       run: cmake --build ${{github.workspace}}/build --config ${{env.BUILD_TYPE}}
