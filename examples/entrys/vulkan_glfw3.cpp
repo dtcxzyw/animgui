@@ -155,7 +155,9 @@ int main() {
         }
         vk::PresentModeKHR present_mode{};
         if(const auto present_modes = physical_device.getSurfacePresentModesKHR(surface.get());
-           std::find(present_modes.cbegin(), present_modes.cend(), vk::PresentModeKHR::eMailbox) != present_modes.cend())
+           std::find(present_modes.cbegin(), present_modes.cend(), vk::PresentModeKHR::eImmediate) != present_modes.cend())
+            present_mode = vk::PresentModeKHR::eImmediate;
+        else if(std::find(present_modes.cbegin(), present_modes.cend(), vk::PresentModeKHR::eMailbox) != present_modes.cend())
             present_mode = vk::PresentModeKHR::eMailbox;
         else if(std::find(present_modes.cbegin(), present_modes.cend(), vk::PresentModeKHR::eFifo) != present_modes.cend())
             present_mode = vk::PresentModeKHR::eFifo;
