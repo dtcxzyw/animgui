@@ -11,13 +11,83 @@
 #include <utf8.h>
 
 namespace animgui {
-    ANIMGUI_API void text(canvas& parent, std::pmr::string str) {
+
+    text_modifier::text_modifier(canvas& parent, size_t idx)
+        : m_ref(std::get<canvas_text>(std::get<primitive>(parent.commands()[idx]))) {}
+    text_modifier& text_modifier::font(std::shared_ptr<animgui::font> font) {
+        m_ref.font_ref = std::move(font);
+        return *this;
+    }
+    text_modifier& text_modifier::text_color(const color_rgba& color) {
+        m_ref.color = color;
+        return *this;
+    }
+
+    button_label_modifier::button_label_modifier(canvas& parent, size_t idx_base, size_t idx_text, bool clicked, bool pressed, bool focused)
+        : m_ref_base(std::get<canvas_fill_rect>(std::get<primitive>(parent.commands()[idx_base]))),
+          m_ref_text(std::get<canvas_text>(std::get<primitive>(parent.commands()[idx_text]))),
+          m_clicked{ clicked },
+          m_pressed{ pressed },
+          m_focused{ focused } {}
+    button_label_modifier& button_label_modifier::font(std::shared_ptr<animgui::font> font) {
+        m_ref_text.font_ref = std::move(font); 
+        return *this;
+    }
+    button_label_modifier& button_label_modifier::set_style(const style& new_style) {
+        m_ref_text.font_ref = new_style.default_font; 
+        m_ref_text.color = new_style.primary.text;
+        m_ref_base.color = m_pressed ? new_style.action.selected : (m_focused ? new_style.action.hover : new_style.primary.main);
+        return *this;
+    }
+    button_label_modifier::operator bool() const {
+        return m_clicked;
+    }
+
+    image_modifier::image_modifier(canvas& parent, size_t idx)
+        : m_ref(std::get<canvas_image>(std::get<primitive>(parent.commands()[idx]))) {}
+    image_modifier& image_modifier::factor(const color_rgba& factor) {
+        m_ref.factor = factor;
+        return *this;
+    }
+
+    button_image_modifier::button_image_modifier(canvas& parent, size_t idx_base, image_modifier img_modifier, bool clicked, bool pressed, bool focused)
+        : m_ref_base(std::get<canvas_fill_rect>(std::get<primitive>(parent.commands()[idx_base]))),
+          m_img_modifier{std::move(img_modifier)},
+          m_clicked{ clicked },
+          m_pressed{ pressed },
+          m_focused{ focused } {}
+    button_image_modifier& button_image_modifier::set_style(const style& new_style) {
+        m_ref_base.color = m_pressed ? new_style.action.selected : (m_focused ? new_style.action.hover : new_style.primary.main);
+        return *this;
+    }
+    button_image_modifier& button_image_modifier::factor(const color_rgba& color) {
+        m_img_modifier.factor(color);
+        return *this;
+    }
+    button_image_modifier::operator bool() const {
+        return m_clicked;
+    }
+
+    slider_modifier::slider_modifier(canvas& parent, size_t idx_base, size_t idx_handle, bool focused)
+        : m_ref_base(std::get<canvas_fill_rect>(std::get<primitive>(parent.commands()[idx_base]))),
+          m_ref_handle(std::get<canvas_fill_rect>(std::get<primitive>(parent.commands()[idx_handle]))),
+          m_focused{focused} {}
+    slider_modifier& slider_modifier::set_style(const style& new_style) {
+        m_ref_base.color = new_style.background;
+        m_ref_handle.color = m_focused ? new_style.action.hover : new_style.primary.main;
+        return *this;
+    }
+
+
+
+    ANIMGUI_API text_modifier text(canvas& parent, std::pmr::string str) {
         primitive text = canvas_text{ vec2{ 0.0f, 0.0f }, std::move(str), parent.global_style().default_font,
                                       parent.global_style().text.primary };
         const auto [w, h] = parent.calculate_bounds(text);
         parent.push_region(parent.region_sub_uid(), bounds_aabb{ 0.0f, w, 0.0f, h });
-        parent.add_primitive("content"_id, std::move(text));
+        const auto idx = parent.add_primitive("content"_id, std::move(text)).first;
         parent.pop_region();
+        return text_modifier{ parent, idx };
     }
     ANIMGUI_API bool clicked(canvas& parent, const identifier id, const bool pressed, const bool focused) {
         auto& last_pressed = parent.storage<bool>(id);
@@ -25,40 +95,51 @@ namespace animgui {
         last_pressed = pressed;
         return res;
     }
-    static bool button_with_content(canvas& parent, const std::function<void(canvas&)>& render_function) {
+    ANIMGUI_API button_label_modifier button_label(canvas& parent, std::pmr::string label) {
         parent.push_region(parent.region_sub_uid());
         const auto focused = parent.region_request_focus() || parent.region_hovered();
         const auto pressed = focused && parent.input().action_press();
-        auto [idx, uid] = parent.add_primitive(
-            "button_base"_id,
-            button_base{ { 0.0f, 0.0f },
-                         { 0.0f, 0.0f },
-                         pressed ? button_status::pressed : (focused ? button_status::focused : button_status::normal) });
+        primitive text = canvas_text{ vec2{ 0.0f, 0.0f }, std::move(label), parent.global_style().default_font, color_rgba{} };
+        const auto [text_w, text_h] = parent.calculate_bounds(text);
+        const auto w = text_w + parent.global_style().padding.x * 2;
+        const auto h = text_h + parent.global_style().padding.y * 2;
+        auto [idx_base, uid] = parent.add_primitive("button_base"_id, canvas_fill_rect{ { 0, w, 0, h }, color_rgba{} });
         const auto res = clicked(parent, uid, pressed, focused);
         parent.push_region(parent.region_sub_uid());
-        const auto content_size = layout_row(parent, row_alignment::left, render_function);
-        auto&& inst = std::get<button_base>(std::get<primitive>(parent.commands()[idx]));
-        inst.content_size = content_size;
-        const auto [w, h] = parent.calculate_bounds(inst);
-        const auto padding_x = (w - content_size.x) / 2.0f;
-        const auto padding_y = (h - content_size.y) / 2.0f;
-        parent.pop_region(bounds_aabb{ padding_x, padding_x + content_size.x, padding_y, padding_y + content_size.y });
+        const auto idx_text = parent.add_primitive("text"_id, text).first;
+        const auto padding_x = parent.global_style().padding.x;
+        const auto padding_y = parent.global_style().padding.y;
+        parent.pop_region(bounds_aabb{ padding_x, padding_x + text_w, padding_y, padding_y + text_h });
         parent.pop_region(bounds_aabb{ 0.0f, w, 0.0f, h });
-        return res;
+        button_label_modifier modifier{ parent, idx_base, idx_text, res, pressed, focused };
+        modifier.set_style(parent.global_style());
+        return modifier;
     }
-    ANIMGUI_API bool button_label(canvas& parent, std::pmr::string label) {
-        return button_with_content(parent, [&](canvas& sub_canvas) { text(sub_canvas, std::move(label)); });
-    }
-    ANIMGUI_API void image(canvas& parent, texture_region image, const vec2 size, const color_rgba& factor) {
-        primitive text = canvas_image{ { 0.0f, size.x, 0.0f, size.y }, std::move(image), factor };
-        const auto [w, h] = parent.calculate_bounds(text);
+    ANIMGUI_API image_modifier image(canvas& parent, texture_region image, const vec2 size, const color_rgba& factor) {
+        primitive img = canvas_image{ { 0.0f, size.x, 0.0f, size.y }, std::move(image), factor };
+        const auto [w, h] = parent.calculate_bounds(img);
         parent.push_region(parent.region_sub_uid(), bounds_aabb{ 0.0f, w, 0.0f, h });
-        parent.add_primitive("content"_id, std::move(text));
+        const auto idx = parent.add_primitive("content"_id, std::move(img)).first;
         parent.pop_region();
+        return image_modifier{ parent, idx };
     }
-    ANIMGUI_API bool button_image(canvas& parent, texture_region image, vec2 size, const color_rgba& factor) {
-        return button_with_content(parent,
-                                   [&](canvas& sub_canvas) { animgui::image(sub_canvas, std::move(image), size, factor); });
+    ANIMGUI_API button_image_modifier button_image(canvas& parent, texture_region image, vec2 size, const color_rgba& factor) {
+        parent.push_region(parent.region_sub_uid());
+        const auto focused = parent.region_request_focus() || parent.region_hovered();
+        const auto pressed = focused && parent.input().action_press();
+        const auto w = size.x + parent.global_style().padding.x * 2;
+        const auto h = size.y + parent.global_style().padding.y * 2;
+        auto [idx_base, uid] = parent.add_primitive("button_base"_id, canvas_fill_rect{ { 0, w, 0, h }, color_rgba{} });
+        const auto res = clicked(parent, uid, pressed, focused);
+        parent.push_region(parent.region_sub_uid());
+        image_modifier img_modifier = animgui::image(parent, std::move(image), size, factor);
+        const auto padding_x = parent.global_style().padding.x;
+        const auto padding_y = parent.global_style().padding.y;
+        parent.pop_region(bounds_aabb{ padding_x, padding_x + size.x, padding_y, padding_y + size.y });
+        parent.pop_region(bounds_aabb{ 0.0f, w, 0.0f, h });
+        button_image_modifier modifier{ parent, idx_base, img_modifier, res, pressed, focused };
+        modifier.set_style(parent.global_style());
+        return modifier;
     }
     ANIMGUI_API bool selected(canvas& parent, const identifier id) {
         auto& [state, pressed] = parent.storage<std::pair<bool, bool>>(mix(id, "selected"_id));
@@ -303,7 +384,6 @@ namespace animgui {
                                                                     style.padding.y + style.default_font->height() },
                                                        style.action.selected });
             }
-
             parent.input().set_input_candidate_window(
                 parent.region_bounds(),
                 parent.region_offset() + vec2{ start_pos, style.padding.y + style.default_font->height() * 0.5f });
@@ -411,17 +491,20 @@ namespace animgui {
     }
 
     template <typename T>
-    static void slider_impl(canvas& parent, const float width, const float handle_width, T& val, const T min, const T max) {
+    static slider_modifier slider_impl(canvas& parent, const float width, const float handle_width, T& val, const T min,
+                                       const T max) {
         auto&& style = parent.global_style();
         const auto height = style.default_font->height() + 2.0f * style.padding.y;
         const auto full_uid = parent.push_region(parent.region_sub_uid(), bounds_aabb{ 0.0f, width, 0.0f, height }).second;
 
         const auto base_height = 3 * style.bounds_edge_width;
 
-        parent.add_primitive(
-            "base"_id,
-            canvas_fill_rect{ bounds_aabb{ 0.0f, width, (height - base_height) / 2.0f, (height + base_height) / 2.0f },
-                              style.background });
+        const size_t idx_base = parent
+                                    .add_primitive("base"_id,
+                                                   canvas_fill_rect{ bounds_aabb{ 0.0f, width, (height - base_height) / 2.0f,
+                                                                                  (height + base_height) / 2.0f },
+                                                                     style.background })
+                                    .first;
 
         assert(min <= val && val <= max);
         auto& progress = parent.storage<float>(full_uid);
@@ -444,13 +527,17 @@ namespace animgui {
 
         focused |= parent.region_request_focus() || parent.region_hovered();
 
-        parent.add_primitive("base"_id,
-                             canvas_fill_rect{ bounds_aabb{ 0.0f, handle_width, 0.0f, height },
-                                               focused ? style.action.hover : style.action.active });
+        const size_t idx_handle =
+            parent.add_primitive("base"_id, canvas_fill_rect{ bounds_aabb{ 0.0f, handle_width, 0.0f, height }, color_rgba{} })
+                .first;
         const auto center = scale * progress + half_width;
         parent.pop_region(bounds_aabb{ center - half_width, center + half_width, 0.0f, height });
 
         parent.pop_region();
+
+        slider_modifier modifier{ parent, idx_base, idx_handle, focused };
+        modifier.set_style(style);
+        return modifier;
     }
     ANIMGUI_API void slider(canvas& parent, const float width, const float min_handle_width, int32_t& val, const int32_t min,
                             const int32_t max) {
