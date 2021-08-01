@@ -8,14 +8,14 @@ C++代码规范
 - 使用根目录下的.clang-format文件格式化代码
 - 使用C++17标准，确保代码能在gcc和msvc下正常编译(clang由于pmr的原因暂不支持)
 - 尽可能使用const/auto/override/final/noexcept/constexpr/static/[[noreturn]]/[[nodiscard]]/[[fallthrough]]等标记
-- 尽可能使用类型擦除技术减少类型暴露
+- 尽可能使用类型擦除技术减少类型暴露，即大部分暴露在外的类型都是Interface
 - 不引入任何命名空间，除自定义字面量外
 - 尽可能使用pmr作为容器的内存分配器
 - 按值传递所有权，其余一般按const引用传递参数。拥有SSO优化的string除外
 - 使用智能指针，一般情况下不出现任何形式的new/delete
 - 谨慎引入第三方依赖库
-- 允许Resharper和clang等静态分析器的标记
-- 确保所有代码开头都有SPDX-License-Identifier标记
+- 仅允许Resharper和clang的linter标记
+- 确保所有代码开头都有SPDX-License-Identifier标记，即所有代码文件头均为// SPDX-License-Identifier: MIT
 - 为迁移至C++20做准备
 
 API设计规范

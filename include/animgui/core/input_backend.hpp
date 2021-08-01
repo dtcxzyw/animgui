@@ -134,7 +134,7 @@ namespace animgui {
         virtual void set_clipboard_text(const std::pmr::string& str) = 0;
         virtual std::pmr::string get_clipboard_text() = 0;
         [[nodiscard]] virtual span<const uint32_t> get_input_characters() const noexcept = 0;
-        virtual void set_input_candidate_window(bounds_aabb bounds, vec2 pos) = 0;
+        virtual void set_input_candidate_window(vec2 pos) = 0;
 
         [[nodiscard]] virtual vec2 get_cursor_pos() const = 0;
         [[nodiscard]] virtual vec2 mouse_move() const noexcept = 0;

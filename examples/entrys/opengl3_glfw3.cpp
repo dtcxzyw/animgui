@@ -13,12 +13,13 @@
 #include <animgui/builtins/layouts.hpp>
 #include <animgui/core/context.hpp>
 #include <animgui/core/input_backend.hpp>
+#include <cstdlib>
 #include <iostream>
 #include <string>
 
 [[noreturn]] void fail(const std::string& str) {
     std::cout << str << std::endl;
-    std::terminate();
+    std::_Exit(EXIT_FAILURE);
 }
 
 // refer to https://learnopengl.com/In-Practice/Debugging
@@ -125,7 +126,7 @@ int main() {
     glfwWindowHint(GLFW_SAMPLES, 8);
 
     const int width = 1024, height = 768;
-    GLFWwindow* const window = glfwCreateWindow(width, height, "Animgui demo ( opengl3_glfw3 )", nullptr, nullptr);
+    GLFWwindow* const window = glfwCreateWindow(width, height, "Animgui demo (opengl3_glfw3)", nullptr, nullptr);
     int screen_w, screen_h;
     glfwGetMonitorWorkarea(glfwGetPrimaryMonitor(), nullptr, nullptr, &screen_w, &screen_h);
     glfwSetWindowPos(window, (screen_w - width) / 2, (screen_h - height) / 2);

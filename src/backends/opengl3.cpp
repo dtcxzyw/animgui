@@ -97,6 +97,9 @@ namespace animgui {
         void update_texture(const uvec2 offset, const image_desc& image) override {
             if(image.channels != m_channel)
                 throw std::runtime_error{ "mismatched channel" };
+            if(image.size.x == 0 || image.size.y == 0)
+                return;
+
             glBindTexture(GL_TEXTURE_2D, m_id);
             glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
             glTexSubImage2D(GL_TEXTURE_2D, 0, offset.x, offset.y, image.size.x, image.size.y, m_format, GL_UNSIGNED_BYTE,
@@ -183,13 +186,13 @@ namespace animgui {
             m_bind_tex = std::numeric_limits<uint32_t>::max();
         }
 
-        void emit(const native_callback& callback, vec2, uint32_t&) {
+        void emit(const native_callback& callback, uint32_t&) {
             callback();
             make_dirty();
         }
 
-        void emit(const primitives& primitives, const vec2 size, uint32_t& vertices_offset) {
-            auto&& [type, vertices, tex, point_line_size] = primitives;
+        void emit(const primitives& primitives, uint32_t& vertices_offset) {
+            auto&& [type, vertices_count, tex, point_line_size] = primitives;
 
             if(m_dirty) {
                 glEnable(GL_BLEND);
@@ -199,7 +202,7 @@ namespace animgui {
                 glBlendEquation(GL_FUNC_ADD);
 
                 glUseProgram(m_program_id);
-                glUniform2f(glGetUniformLocation(m_program_id, "size"), size.x, size.y);
+                glUniform2f(glGetUniformLocation(m_program_id, "size"), m_window_size.x, m_window_size.y);
                 glBindBuffer(GL_ARRAY_BUFFER, m_vbo);
                 glBindVertexArray(m_vao);
                 glActiveTexture(GL_TEXTURE0);
@@ -216,8 +219,8 @@ namespace animgui {
                 glBindTexture(GL_TEXTURE_2D, m_bind_tex);
             }
 
-            glDrawArrays(get_mode(type), vertices_offset, static_cast<uint32_t>(vertices.size()));
-            vertices_offset += static_cast<uint32_t>(vertices.size());
+            glDrawArrays(get_mode(type), vertices_offset, vertices_count);
+            vertices_offset += vertices_count;
         }
 
     public:
@@ -268,9 +271,18 @@ namespace animgui {
             glDeleteBuffers(1, &m_vbo);
         }
 
-        void update_command_list(const uvec2 window_size, std::pmr::vector<command> command_list) override {
+        void update_command_list(const uvec2 window_size, command_queue command_list) override {
             m_window_size = { static_cast<float>(window_size.x), static_cast<float>(window_size.y) };
-            m_command_list = std::move(command_list);
+
+            glBindBuffer(GL_ARRAY_BUFFER, m_vbo);
+            glBufferData(GL_ARRAY_BUFFER, command_list.vertices.size() * sizeof(vertex), command_list.vertices.data(),
+                         GL_STREAM_DRAW);
+
+            m_command_list.clear();
+            m_command_list.reserve(command_list.commands.size());
+
+            for(auto&& command : command_list.commands)
+                m_command_list.push_back(std::move(command));
         }
 
         std::shared_ptr<texture> create_texture(const uvec2 size, const channel channels) override {
@@ -289,26 +301,19 @@ namespace animgui {
             make_dirty();
             m_scissor_restricted = true;
 
-            {
-                std::pmr::vector<vertex> vertices{ m_command_list.get_allocator().resource() };
-
-                for(auto&& command : m_command_list)
-                    if(const auto item = std::get_if<primitives>(&command.desc))
-                        vertices.insert(vertices.cend(), item->vertices.cbegin(), item->vertices.cend());
-
-                glBindBuffer(GL_ARRAY_BUFFER, m_vbo);
-                glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(vertex), vertices.data(), GL_STREAM_DRAW);
-            }
             uint32_t vertices_offset = 0;
+
+            const vec2 scale = { static_cast<float>(screen_size.x) / m_window_size.x,
+                                 static_cast<float>(screen_size.y) / m_window_size.y };
 
             // ReSharper disable once CppUseStructuredBinding
             for(auto&& command : m_command_list) {
                 if(command.clip.has_value()) {
                     const auto clip = command.clip.value();
-                    const int left = static_cast<int>(std::floor(clip.left));
-                    const int right = static_cast<int>(std::ceil(clip.right));
-                    const int bottom = static_cast<int>(std::ceil(clip.bottom));
-                    const int top = static_cast<int>(std::floor(clip.top));
+                    const int left = static_cast<int>(std::floor(clip.left * scale.x));
+                    const int right = static_cast<int>(std::ceil(clip.right * scale.x));
+                    const int bottom = static_cast<int>(std::ceil(clip.bottom * scale.y));
+                    const int top = static_cast<int>(std::floor(clip.top * scale.y));
 
                     glScissor(left, screen_size.y - bottom, right - left, bottom - top);
                     m_scissor_restricted = true;
@@ -319,7 +324,7 @@ namespace animgui {
                     }
                 }
 
-                std::visit([&](auto&& item) { emit(item, m_window_size, vertices_offset); }, command.desc);
+                std::visit([&](auto&& item) { emit(item, vertices_offset); }, command.desc);
             }
 
             const auto tp2 = current_time();
