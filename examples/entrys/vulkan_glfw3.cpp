@@ -51,8 +51,8 @@ int main() {
     try {
         std::pmr::memory_resource* memory_resource = std::pmr::get_default_resource();  // TODO: vulkan memory allocator
 
-        vk::ApplicationInfo application_info{ "animgui_demo", VK_MAKE_VERSION(1, 0, 0), "animgui", VK_MAKE_VERSION(1, 0, 0),
-                                              VK_API_VERSION_1_2 };
+        const vk::ApplicationInfo application_info{ "animgui_demo", VK_MAKE_VERSION(1, 0, 0), "animgui", VK_MAKE_VERSION(1, 0, 0),
+                                                    VK_API_VERSION_1_2 };
 
         uint32_t extensions_count;
         auto extensions_array = glfwGetRequiredInstanceExtensions(&extensions_count);
