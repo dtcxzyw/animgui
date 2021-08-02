@@ -1,16 +1,17 @@
 // SPDX-License-Identifier: MIT
 
-#include <animgui/backends/d3d12.hpp>
-#include <animgui/core/render_backend.hpp>
 #define NOMINMAX
 #include "hlsl_shaders.hpp"
+#include <animgui/backends/d3d12.hpp>
+#include <animgui/core/render_backend.hpp>
 #include <cassert>
 #include <cmath>
 #include <cstring>
-#include <d3dcompiler.h>
 #include <directx/d3dx12.h>
 #include <queue>
 #include <utility>
+#define DX12_FORCE_INCLUDE
+#include <d3dcompiler.h>
 
 namespace animgui {
     // TODO: Rasterizer Order Views?
