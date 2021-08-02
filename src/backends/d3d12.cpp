@@ -7,11 +7,10 @@
 #include <cassert>
 #include <cmath>
 #include <cstring>
+#include <d3dcompiler.h>
 #include <directx/d3dx12.h>
 #include <queue>
 #include <utility>
-#define DX12_FORCE_INCLUDE
-#include <d3dcompiler.h>
 
 namespace animgui {
     // TODO: Rasterizer Order Views?

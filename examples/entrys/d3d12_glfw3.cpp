@@ -17,7 +17,6 @@
 #include <animgui/core/input_backend.hpp>
 #include <array>
 #include <cstdlib>
-#include <d3d12.h>
 #include <directx/d3dx12.h>
 #include <dxgi1_4.h>
 #include <iostream>
