@@ -24,7 +24,7 @@
 }
 
 void check_vulkan_result(const vk::Result res) {
-    if(res != vk::Result::eSuccess && res != vk::Result::eTimeout && res != vk::Result::eSuboptimalKHR) {
+    if(res != vk::Result::eSuccess) {
         fail("Vulkan Error");
     }
 }
@@ -59,7 +59,11 @@ int main() {
 
         // TODO: dynamic loader
         // TODO: debug callback
-        const std::initializer_list<const char*> layers = { "VK_LAYER_KHRONOS_validation" };
+        const std::initializer_list<const char*> layers = {
+#ifdef ANIMGUI_DEBUG
+            "VK_LAYER_KHRONOS_validation"  //, "VK_LAYER_LUNARG_api_dump", "VK_LAYER_KHRONOS_synchronization2"
+#endif
+        };
 
         const auto instance = vk::createInstanceUnique(vk::InstanceCreateInfo{
             {}, &application_info, static_cast<uint32_t>(layers.size()), layers.begin(), extensions_count, extensions_array });
@@ -173,17 +177,11 @@ int main() {
         constexpr uint32_t max_frames_in_flight = 2;
         std::pmr::vector<vk::UniqueSemaphore> render_finished_semaphores{ max_frames_in_flight, memory_resource };
         std::pmr::vector<vk::UniqueSemaphore> image_available_semaphores{ max_frames_in_flight, memory_resource };
-        std::pmr::vector<vk::UniqueFence> in_flight_fences{ max_frames_in_flight, memory_resource };
+        std::pmr::vector<std::pair<vk::UniqueFence, bool>> in_flight_fences{ max_frames_in_flight, memory_resource };
         std::pmr::vector<vk::Fence> images_in_flight{ memory_resource };
         vk::UniqueImage multiple_sampled_image;
         vk::UniqueDeviceMemory multiple_sampled_image_memory;
         vk::UniqueImageView multiple_sampled_image_view;
-
-        for(uint32_t i = 0; i < max_frames_in_flight; ++i) {
-            render_finished_semaphores[i] = device->createSemaphoreUnique(vk::SemaphoreCreateInfo{});
-            image_available_semaphores[i] = device->createSemaphoreUnique(vk::SemaphoreCreateInfo{});
-            in_flight_fences[i] = device->createFenceUnique(vk::FenceCreateInfo{});
-        }
 
         animgui::synchronized_executor transferer = [&](const std::function<void(vk::CommandBuffer&)>& callback) {
             vk::UniqueCommandBuffer temp = std::move(device
@@ -215,6 +213,142 @@ int main() {
         auto swap_chain_w = 0, swap_chain_h = 0;
         uint32_t current_idx = 0;
 
+        const auto reset_swap_chain = [&](const int w, const int h) {
+            device->waitIdle();
+            for(auto&& [fence, used] : in_flight_fences) {
+                if(used) {
+                    check_vulkan_result(device->waitForFences(1, &fence.get(), true, std::numeric_limits<uint64_t>::max()));
+                }
+            }
+
+            frame_buffers.clear();
+            command_buffers.clear();
+            render_pass.reset();
+            swap_chain_image_views.clear();
+
+            for(uint32_t i = 0; i < max_frames_in_flight; ++i) {
+                render_finished_semaphores[i] = device->createSemaphoreUnique(vk::SemaphoreCreateInfo{});
+                image_available_semaphores[i] = device->createSemaphoreUnique(vk::SemaphoreCreateInfo{});
+                in_flight_fences[i] = { device->createFenceUnique(vk::FenceCreateInfo{}), false };
+            }
+
+            multiple_sampled_image = device->createImageUnique(
+                vk::ImageCreateInfo{ {},
+                                     vk::ImageType::e2D,
+                                     selected_format.format,
+                                     vk::Extent3D{ static_cast<uint32_t>(w), static_cast<uint32_t>(h), 1 },
+                                     1,
+                                     1,
+                                     sample_count,
+                                     vk::ImageTiling::eOptimal,
+                                     vk::ImageUsageFlagBits::eTransientAttachment | vk::ImageUsageFlagBits::eColorAttachment,
+                                     vk::SharingMode::eExclusive,
+                                     0,
+                                     nullptr,
+                                     vk::ImageLayout::eUndefined });
+            const auto requirements = device->getImageMemoryRequirements(multiple_sampled_image.get());
+
+            auto find_memory_type_index = [&](const uint32_t memory_type_bits) {
+                constexpr auto property_mask = vk::MemoryPropertyFlagBits::eDeviceLocal;
+                for(uint32_t i = 0; i < memory_prop.memoryTypeCount; ++i) {
+                    if((memory_type_bits & (1u << i)) &&
+                       (memory_prop.memoryTypes[i].propertyFlags & property_mask) == property_mask) {
+                        return i;
+                    }
+                }
+                return std::numeric_limits<uint32_t>::max();
+            };
+
+            multiple_sampled_image_memory = device->allocateMemoryUnique(
+                vk::MemoryAllocateInfo{ requirements.size, find_memory_type_index(requirements.memoryTypeBits) });
+            device->bindImageMemory(multiple_sampled_image.get(), multiple_sampled_image_memory.get(), 0);
+            multiple_sampled_image_view =
+                device->createImageViewUnique(vk::ImageViewCreateInfo{ {},
+                                                                       multiple_sampled_image.get(),
+                                                                       vk::ImageViewType::e2D,
+                                                                       selected_format.format,
+                                                                       {},
+                                                                       { vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1 } });
+
+            const auto surface_capabilities = physical_device.getSurfaceCapabilitiesKHR(surface.get());
+            const auto buffers_count = std::min(surface_capabilities.minImageCount + 1, surface_capabilities.maxImageCount);
+
+            swap_chain = device->createSwapchainKHRUnique(
+                vk::SwapchainCreateInfoKHR{ {},
+                                            surface.get(),
+                                            buffers_count,
+                                            selected_format.format,
+                                            selected_format.colorSpace,
+                                            vk::Extent2D{ static_cast<uint32_t>(w), static_cast<uint32_t>(h) },
+                                            1,
+                                            vk::ImageUsageFlagBits::eColorAttachment,
+                                            vk::SharingMode::eExclusive,
+                                            0,
+                                            nullptr,
+                                            surface_capabilities.currentTransform,
+                                            vk::CompositeAlphaFlagBitsKHR::eOpaque,
+                                            present_mode,
+                                            true,
+                                            swap_chain.get() });
+            for(const auto image : device->getSwapchainImagesKHR(swap_chain.get())) {
+                swap_chain_image_views.push_back(device->createImageViewUnique(
+                    vk::ImageViewCreateInfo{ {},
+                                             image,
+                                             vk::ImageViewType::e2D,
+                                             selected_format.format,
+                                             {},
+                                             vk::ImageSubresourceRange{ vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1 } }));
+            }
+
+            const vk::AttachmentDescription color[] = { { {},
+                                                          selected_format.format,
+                                                          sample_count,
+                                                          vk::AttachmentLoadOp::eClear,
+                                                          vk::AttachmentStoreOp::eStore,
+                                                          vk::AttachmentLoadOp::eDontCare,
+                                                          vk::AttachmentStoreOp::eDontCare,
+                                                          vk::ImageLayout::eUndefined,
+                                                          vk::ImageLayout::eColorAttachmentOptimal },
+                                                        { {},
+                                                          selected_format.format,
+                                                          vk::SampleCountFlagBits::e1,
+                                                          vk::AttachmentLoadOp::eDontCare,
+                                                          vk::AttachmentStoreOp::eStore,
+                                                          vk::AttachmentLoadOp::eDontCare,
+                                                          vk::AttachmentStoreOp::eDontCare,
+                                                          vk::ImageLayout::eUndefined,
+                                                          vk::ImageLayout::ePresentSrcKHR } };
+            const vk::AttachmentReference color_ref{ 0, vk::ImageLayout::eColorAttachmentOptimal };
+            const vk::AttachmentReference color_resolve_ref{ 1, vk::ImageLayout::eColorAttachmentOptimal };
+            const vk::SubpassDescription sub_pass{
+                {}, vk::PipelineBindPoint::eGraphics, 0, nullptr, 1, &color_ref, &color_resolve_ref, nullptr, 0, nullptr
+            };
+            const vk::SubpassDependency dependency{ VK_SUBPASS_EXTERNAL,
+                                                    0,
+                                                    vk::PipelineStageFlagBits::eColorAttachmentOutput,
+                                                    vk::PipelineStageFlagBits::eColorAttachmentOutput,
+                                                    {},
+                                                    vk::AccessFlagBits::eColorAttachmentWrite };
+            render_pass = device->createRenderPassUnique(
+                vk::RenderPassCreateInfo{ {}, static_cast<uint32_t>(std::size(color)), color, 1, &sub_pass, 1, &dependency });
+            for(auto&& image_view : swap_chain_image_views) {
+                const vk::ImageView attachments[] = { multiple_sampled_image_view.get(), image_view.get() };
+                frame_buffers.push_back(
+                    device->createFramebufferUnique(vk::FramebufferCreateInfo{ {},
+                                                                               render_pass.get(),
+                                                                               static_cast<uint32_t>(std::size(attachments)),
+                                                                               attachments,
+                                                                               static_cast<uint32_t>(w),
+                                                                               static_cast<uint32_t>(h),
+                                                                               1 }));
+            }
+            command_buffers = device->allocateCommandBuffersUnique(vk::CommandBufferAllocateInfo{
+                command_pool.get(), vk::CommandBufferLevel::ePrimary, static_cast<uint32_t>(frame_buffers.size()) });
+            current_command_buffer = command_buffers.front().get();
+            images_in_flight.clear();
+            images_in_flight.resize(frame_buffers.size(), vk::Fence{});
+        };
+
         draw = [&] {
             int w, h;
             glfwGetFramebufferSize(window, &w, &h);
@@ -224,128 +358,8 @@ int main() {
             if(w != swap_chain_w || h != swap_chain_h) {
                 swap_chain_w = w;
                 swap_chain_h = h;
-
-                device->waitIdle();
-
-                frame_buffers.clear();
-                command_buffers.clear();
-                render_pass.reset();
-                swap_chain_image_views.clear();
-
-                multiple_sampled_image = device->createImageUnique(
-                    vk::ImageCreateInfo{ {},
-                                         vk::ImageType::e2D,
-                                         selected_format.format,
-                                         vk::Extent3D{ static_cast<uint32_t>(w), static_cast<uint32_t>(h), 1 },
-                                         1,
-                                         1,
-                                         sample_count,
-                                         vk::ImageTiling::eOptimal,
-                                         vk::ImageUsageFlagBits::eTransientAttachment | vk::ImageUsageFlagBits::eColorAttachment,
-                                         vk::SharingMode::eExclusive,
-                                         0,
-                                         nullptr,
-                                         vk::ImageLayout::eUndefined });
-                const auto requirements = device->getImageMemoryRequirements(multiple_sampled_image.get());
-
-                auto find_memory_type_index = [&](const uint32_t memory_type_bits) {
-                    constexpr auto property_mask = vk::MemoryPropertyFlagBits::eDeviceLocal;
-                    for(uint32_t i = 0; i < memory_prop.memoryTypeCount; ++i) {
-                        if((memory_type_bits & (1u << i)) &&
-                           (memory_prop.memoryTypes[i].propertyFlags & property_mask) == property_mask) {
-                            return i;
-                        }
-                    }
-                    return std::numeric_limits<uint32_t>::max();
-                };
-
-                multiple_sampled_image_memory = device->allocateMemoryUnique(
-                    vk::MemoryAllocateInfo{ requirements.size, find_memory_type_index(requirements.memoryTypeBits) });
-                device->bindImageMemory(multiple_sampled_image.get(), multiple_sampled_image_memory.get(), 0);
-                multiple_sampled_image_view =
-                    device->createImageViewUnique(vk::ImageViewCreateInfo{ {},
-                                                                           multiple_sampled_image.get(),
-                                                                           vk::ImageViewType::e2D,
-                                                                           selected_format.format,
-                                                                           {},
-                                                                           { vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1 } });
-
-                const auto surface_capabilities = physical_device.getSurfaceCapabilitiesKHR(surface.get());
-                const auto buffers_count = std::min(surface_capabilities.minImageCount + 1, surface_capabilities.maxImageCount);
-
-                swap_chain = device->createSwapchainKHRUnique(
-                    vk::SwapchainCreateInfoKHR{ {},
-                                                surface.get(),
-                                                buffers_count,
-                                                selected_format.format,
-                                                selected_format.colorSpace,
-                                                vk::Extent2D{ static_cast<uint32_t>(w), static_cast<uint32_t>(h) },
-                                                1,
-                                                vk::ImageUsageFlagBits::eColorAttachment,
-                                                vk::SharingMode::eExclusive,
-                                                0,
-                                                nullptr,
-                                                surface_capabilities.currentTransform,
-                                                vk::CompositeAlphaFlagBitsKHR::eOpaque,
-                                                present_mode,
-                                                true,
-                                                swap_chain.get() });
-                for(const auto image : device->getSwapchainImagesKHR(swap_chain.get())) {
-                    swap_chain_image_views.push_back(device->createImageViewUnique(
-                        vk::ImageViewCreateInfo{ {},
-                                                 image,
-                                                 vk::ImageViewType::e2D,
-                                                 selected_format.format,
-                                                 {},
-                                                 vk::ImageSubresourceRange{ vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1 } }));
-                }
-
-                const vk::AttachmentDescription color[] = { { {},
-                                                              selected_format.format,
-                                                              sample_count,
-                                                              vk::AttachmentLoadOp::eClear,
-                                                              vk::AttachmentStoreOp::eStore,
-                                                              vk::AttachmentLoadOp::eDontCare,
-                                                              vk::AttachmentStoreOp::eDontCare,
-                                                              vk::ImageLayout::eUndefined,
-                                                              vk::ImageLayout::eColorAttachmentOptimal },
-                                                            { {},
-                                                              selected_format.format,
-                                                              vk::SampleCountFlagBits::e1,
-                                                              vk::AttachmentLoadOp::eDontCare,
-                                                              vk::AttachmentStoreOp::eStore,
-                                                              vk::AttachmentLoadOp::eDontCare,
-                                                              vk::AttachmentStoreOp::eDontCare,
-                                                              vk::ImageLayout::eUndefined,
-                                                              vk::ImageLayout::ePresentSrcKHR } };
-                const vk::AttachmentReference color_ref{ 0, vk::ImageLayout::eColorAttachmentOptimal };
-                const vk::AttachmentReference color_resolve_ref{ 1, vk::ImageLayout::eColorAttachmentOptimal };
-                const vk::SubpassDescription sub_pass{
-                    {}, vk::PipelineBindPoint::eGraphics, 0, nullptr, 1, &color_ref, &color_resolve_ref, nullptr, 0, nullptr
-                };
-                const vk::SubpassDependency dependency{ VK_SUBPASS_EXTERNAL,
-                                                        0,
-                                                        vk::PipelineStageFlagBits::eColorAttachmentOutput,
-                                                        vk::PipelineStageFlagBits::eColorAttachmentOutput,
-                                                        {},
-                                                        vk::AccessFlagBits::eColorAttachmentWrite };
-                render_pass = device->createRenderPassUnique(
-                    vk::RenderPassCreateInfo{ {}, static_cast<uint32_t>(std::size(color)), color, 1, &sub_pass, 1, &dependency });
-                for(auto&& image_view : swap_chain_image_views) {
-                    const vk::ImageView attachments[] = { multiple_sampled_image_view.get(), image_view.get() };
-                    frame_buffers.push_back(
-                        device->createFramebufferUnique(vk::FramebufferCreateInfo{ {},
-                                                                                   render_pass.get(),
-                                                                                   static_cast<uint32_t>(std::size(attachments)),
-                                                                                   attachments,
-                                                                                   static_cast<uint32_t>(w),
-                                                                                   static_cast<uint32_t>(h),
-                                                                                   1 }));
-                }
-                command_buffers = device->allocateCommandBuffersUnique(vk::CommandBufferAllocateInfo{
-                    command_pool.get(), vk::CommandBufferLevel::ePrimary, static_cast<uint32_t>(frame_buffers.size()) });
-                current_command_buffer = command_buffers.front().get();
-                images_in_flight.resize(frame_buffers.size(), vk::Fence{});
+                reset_swap_chain(w, h);
+                return;
             }
 
             const auto current = glfwGetTime();
@@ -357,12 +371,18 @@ int main() {
 
             ctx->new_frame(window_w, window_h, delta_t, [&](animgui::canvas& canvas_root) { app->render(canvas_root); });
 
-            check_vulkan_result(
-                device->waitForFences(1, &in_flight_fences[current_idx].get(), true, std::numeric_limits<uint64_t>::max()));
-            const uint32_t image_idx = device
-                                           ->acquireNextImageKHR(swap_chain.get(), std::numeric_limits<uint64_t>::max(),
-                                                                 image_available_semaphores[current_idx].get())
-                                           .value;
+            auto&& [fence, used] = in_flight_fences[current_idx];
+
+            if(used)
+                check_vulkan_result(device->waitForFences(1, &fence.get(), true, std::numeric_limits<uint64_t>::max()));
+
+            const auto [next_res, image_idx] = device->acquireNextImageKHR(swap_chain.get(), std::numeric_limits<uint64_t>::max(),
+                                                                           image_available_semaphores[current_idx].get());
+            if(next_res != vk::Result::eSuccess) {
+                // reset_swap_chain(w, h);
+                return;
+            }
+
             current_command_buffer = command_buffers[image_idx].get();
             current_command_buffer.begin(vk::CommandBufferBeginInfo{ vk::CommandBufferUsageFlagBits::eOneTimeSubmit });
             const vk::ClearValue clear_color{ vk::ClearColorValue{ std::array<float, 4>{ 0.0f, 0.0f, 0.0f, 1.0f } } };
@@ -379,18 +399,24 @@ int main() {
                 check_vulkan_result(
                     device->waitForFences(1, &images_in_flight[image_idx], true, std::numeric_limits<uint64_t>::max()));
             }
-            images_in_flight[image_idx] = in_flight_fences[current_idx].get();
+            images_in_flight[image_idx] = fence.get();
+            used = true;
 
-            check_vulkan_result(device->resetFences(1, &in_flight_fences[current_idx].get()));
+            check_vulkan_result(device->resetFences(1, &fence.get()));
             const vk::PipelineStageFlags stage = vk::PipelineStageFlagBits::eColorAttachmentOutput;
             const vk::SubmitInfo submit_info{
                 1, &image_available_semaphores[current_idx].get(), &stage, 1, &current_command_buffer,
                 1, &render_finished_semaphores[current_idx].get()
             };
-            check_vulkan_result(queue.submit(1, &submit_info, in_flight_fences[current_idx].get()));
+            check_vulkan_result(queue.submit(1, &submit_info, fence.get()));
 
-            check_vulkan_result(queue.presentKHR(
-                vk::PresentInfoKHR{ 1, &render_finished_semaphores[current_idx].get(), 1, &swap_chain.get(), &image_idx }));
+            const vk::PresentInfoKHR present_info{ 1, &render_finished_semaphores[current_idx].get(), 1, &swap_chain.get(),
+                                                   &image_idx };
+            if(static_cast<vk::Result>(vkQueuePresentKHR(queue, reinterpret_cast<const VkPresentInfoKHR*>(&present_info))) !=
+               vk::Result::eSuccess) {
+                // reset_swap_chain(w, h);
+                return;
+            }
             current_idx = (current_idx + 1) % max_frames_in_flight;
         };
 

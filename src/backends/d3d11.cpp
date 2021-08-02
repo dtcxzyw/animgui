@@ -2,16 +2,14 @@
 
 #include <animgui/backends/d3d11.hpp>
 #include <animgui/core/render_backend.hpp>
-#include <string_view>
 #define NOMINMAX
+#include "hlsl_shaders.hpp"
 #include <cassert>
 #include <cmath>
 #include <cstring>
 #include <d3d11.h>
 #include <d3dcompiler.h>
 #include <utility>
-
-using namespace std::literals;
 
 namespace animgui {
     static DXGI_FORMAT get_format(const channel channel) noexcept {
@@ -51,16 +49,16 @@ namespace animgui {
                      const std::function<void(long)>& error_checker)
             : m_texture{ nullptr }, m_device_context{ device_context }, m_texture_srv{ nullptr }, m_channel{ channel },
               m_size{ size }, m_own{ true }, m_dirty{ false }, m_error_checker{ error_checker } {
-            D3D11_TEXTURE2D_DESC desc{ size.x,
-                                       size.y,
-                                       calculate_mipmap_level(size),
-                                       1,
-                                       get_format(channel),
-                                       DXGI_SAMPLE_DESC{ 1, 0 },
-                                       D3D11_USAGE_DEFAULT,
-                                       D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_RENDER_TARGET,
-                                       0,
-                                       D3D11_RESOURCE_MISC_GENERATE_MIPS };
+            const D3D11_TEXTURE2D_DESC desc{ size.x,
+                                             size.y,
+                                             calculate_mipmap_level(size),
+                                             1,
+                                             get_format(channel),
+                                             DXGI_SAMPLE_DESC{ 1, 0 },
+                                             D3D11_USAGE_DEFAULT,
+                                             D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_RENDER_TARGET,
+                                             0,
+                                             D3D11_RESOURCE_MISC_GENERATE_MIPS };
             check_d3d_error(device->CreateTexture2D(&desc, nullptr, &m_texture));
             create_texture_srv(device);
         }
@@ -109,7 +107,7 @@ namespace animgui {
                 data = rgba.data();
             }
             const auto size_dst = m_channel == channel::alpha ? 1 : 4;
-            D3D11_BOX box{ offset.x, offset.y, 0, offset.x + size.x, offset.y + size.y, 1 };
+            const D3D11_BOX box{ offset.x, offset.y, 0, offset.x + size.x, offset.y + size.y, 1 };
             m_device_context->UpdateSubresource(m_texture, 0, &box, data, size.x * size_dst, 0);
             m_dirty = true;
         }
@@ -126,64 +124,6 @@ namespace animgui {
             return reinterpret_cast<uint64_t>(m_texture_srv);
         }
     };
-
-    static auto vertex_shader_src = R"(
-        cbuffer constant_buffer : register(b0) {
-            float2 size;
-            int mode;
-            int padding;
-        };
-        struct VS_INPUT {
-            float2 pos : POSITION;
-            float2 tex_coord  : TEXCOORD0;
-            float4 color : COLOR0;
-        };
-            
-        struct PS_INPUT {
-            float4 pos : SV_POSITION;
-            float2 tex_coord  : TEXCOORD0;
-            float4 color : COLOR0;
-        };
-
-        PS_INPUT main(VS_INPUT input) {
-            PS_INPUT output;
-            output.pos = float4(input.pos.x/size.x*2.0f-1.0f,1.0f-input.pos.y/size.y*2.0f, 0.0f, 1.0f);
-            output.tex_coord  = input.tex_coord;
-            output.color = input.color;
-            return output;
-        }
-    )"sv;
-
-    static auto pixel_shader_src = R"(
-        cbuffer constant_buffer : register(b0) {
-            float2 size;
-            int mode;
-            int padding;
-        };
-        struct PS_INPUT {
-            float4 pos : SV_POSITION;
-            float2 tex_coord  : TEXCOORD0;
-            float4 color : COLOR0;
-        };
-        sampler sampler0;
-        Texture2D texture0;
-        
-        float4 main(PS_INPUT input) : SV_Target {
-            if(mode==0)
-                return input.color * texture0.Sample(sampler0, input.tex_coord);
-            if(mode==1)
-                return input.color * texture0.Sample(sampler0, input.tex_coord).xxxx;
-            return input.color;
-        }
-    )"sv;
-
-    struct constant_buffer final {
-        vec2 size;
-        int mode;
-        int padding;
-    };
-
-    static_assert(sizeof(constant_buffer) % 16 == 0);
 
     class d3d11_backend final : public render_backend {
         std::pmr::vector<command> m_command_list;
@@ -318,7 +258,7 @@ namespace animgui {
                 ID3DBlob* vertex_shader_blob;
                 ID3DBlob* compile_log;
                 if(D3DCompile(vertex_shader_src.data(), vertex_shader_src.length(), nullptr, nullptr, nullptr, "main", "vs_5_0",
-                              0, 0, &vertex_shader_blob, &compile_log) != S_OK) {
+                              D3DCOMPILE_OPTIMIZATION_LEVEL3, 0, &vertex_shader_blob, &compile_log) != S_OK) {
                     throw std::runtime_error{ "vertex shader compilation failed: "s +
                                               static_cast<char*>(compile_log->GetBufferPointer()) };
                 }
@@ -326,14 +266,11 @@ namespace animgui {
                 check_d3d_error(m_device->CreateVertexShader(vertex_shader_blob->GetBufferPointer(),
                                                              vertex_shader_blob->GetBufferSize(), nullptr, &m_vertex_shader));
 
-                D3D11_INPUT_ELEMENT_DESC input_layout[] = {
-                    { "POSITION", 0, DXGI_FORMAT_R32G32_FLOAT, 0,
-                      static_cast<uint32_t>(reinterpret_cast<uint64_t>(offset(&vertex::pos))), D3D11_INPUT_PER_VERTEX_DATA, 0 },
-                    { "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT, 0,
-                      static_cast<uint32_t>(reinterpret_cast<uint64_t>(offset(&vertex::tex_coord))), D3D11_INPUT_PER_VERTEX_DATA,
+                const D3D11_INPUT_ELEMENT_DESC input_layout[] = {
+                    { "POSITION", 0, DXGI_FORMAT_R32G32_FLOAT, 0, offset_u32(&vertex::pos), D3D11_INPUT_PER_VERTEX_DATA, 0 },
+                    { "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT, 0, offset_u32(&vertex::tex_coord), D3D11_INPUT_PER_VERTEX_DATA,
                       0 },
-                    { "COLOR", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0,
-                      static_cast<uint32_t>(reinterpret_cast<uint64_t>(offset(&vertex::color))), D3D11_INPUT_PER_VERTEX_DATA, 0 },
+                    { "COLOR", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, offset_u32(&vertex::color), D3D11_INPUT_PER_VERTEX_DATA, 0 },
                 };
                 check_d3d_error(m_device->CreateInputLayout(input_layout, 3, vertex_shader_blob->GetBufferPointer(),
                                                             vertex_shader_blob->GetBufferSize(), &m_input_layout));
@@ -343,8 +280,8 @@ namespace animgui {
             {
                 ID3DBlob* pixel_shader_blob;
                 ID3DBlob* compile_log;
-                if(D3DCompile(pixel_shader_src.data(), pixel_shader_src.length(), nullptr, nullptr, nullptr, "main", "ps_5_0", 0,
-                              0, &pixel_shader_blob, &compile_log) != S_OK) {
+                if(D3DCompile(pixel_shader_src.data(), pixel_shader_src.length(), nullptr, nullptr, nullptr, "main", "ps_5_0",
+                              D3DCOMPILE_OPTIMIZATION_LEVEL3, 0, &pixel_shader_blob, &compile_log) != S_OK) {
                     throw std::runtime_error{ "pixel shader compilation failed: "s +
                                               static_cast<char*>(compile_log->GetBufferPointer()) };
                 }
@@ -355,7 +292,7 @@ namespace animgui {
             }
 
             {
-                D3D11_BUFFER_DESC constant_buffer_desc{
+                const D3D11_BUFFER_DESC constant_buffer_desc{
                     sizeof(constant_buffer), D3D11_USAGE_DYNAMIC, D3D11_BIND_CONSTANT_BUFFER, D3D11_CPU_ACCESS_WRITE, 0,
                     sizeof(constant_buffer)
                 };
@@ -375,7 +312,9 @@ namespace animgui {
             }
 
             {
-                D3D11_RASTERIZER_DESC desc{ D3D11_FILL_SOLID, D3D11_CULL_NONE, true, 0, 0.0f, 0.0f, false, true, true, true };
+                const D3D11_RASTERIZER_DESC desc{
+                    D3D11_FILL_SOLID, D3D11_CULL_NONE, true, 0, 0.0f, 0.0f, false, true, true, true
+                };
                 check_d3d_error(m_device->CreateRasterizerState(&desc, &m_rasterizer_state));
             }
             {
@@ -429,7 +368,6 @@ namespace animgui {
             const auto tp1 = current_time();
 
             make_dirty();
-            m_scissor_restricted = true;
 
             uint32_t vertices_offset = 0;
 
@@ -474,7 +412,7 @@ namespace animgui {
         }
     };
     ANIMGUI_API std::shared_ptr<render_backend> create_d3d11_backend(ID3D11Device* device, ID3D11DeviceContext* device_context,
-                                                                     const std::function<void(long)>& error_checker) {
-        return std::make_shared<d3d11_backend>(device, device_context, error_checker);
+                                                                     std::function<void(long)> error_checker) {
+        return std::make_shared<d3d11_backend>(device, device_context, std::move(error_checker));
     }
 }  // namespace animgui

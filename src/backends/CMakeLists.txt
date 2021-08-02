@@ -32,6 +32,10 @@ endif()
 
 
 if(BACKEND_D3D12)
+    find_package(directx-headers CONFIG REQUIRED)
+    add_library(backend_d3d12 SHARED d3d12.cpp)
+    target_compile_definitions(backend_d3d12 PRIVATE ANIMGUI_EXPORT)
+    target_link_libraries(backend_d3d12 PRIVATE d3dcompiler Microsoft::DirectX-Guids Microsoft::DirectX-Headers D3D12)
 endif()
 
 if(BACKEND_VULKAN)

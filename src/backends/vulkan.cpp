@@ -63,8 +63,8 @@ namespace animgui {
         bool m_first_update = true;
 
         static vk::Format get_format(const channel channel) noexcept {
-            return channel == channel::alpha ? vk::Format::eR8Srgb :
-                                               (channel == channel::rgb ? vk::Format::eR8G8B8Srgb : vk::Format::eR8G8B8A8Srgb);
+            return channel == channel::alpha ? vk::Format::eR8Unorm :
+                                               (channel == channel::rgb ? vk::Format::eR8G8B8Unorm : vk::Format::eR8G8B8A8Unorm);
         }
 
         static uint32_t get_pixel_size(const channel channel) noexcept {
