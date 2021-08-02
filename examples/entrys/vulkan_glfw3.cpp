@@ -59,7 +59,11 @@ int main() {
 
         // TODO: dynamic loader
         // TODO: debug callback
-        const std::initializer_list<const char*> layers = { "VK_LAYER_KHRONOS_validation" };
+        const std::initializer_list<const char*> layers = {
+#ifdef ANIMGUI_DEBUG
+            "VK_LAYER_KHRONOS_validation"
+#endif
+        };
 
         const auto instance = vk::createInstanceUnique(vk::InstanceCreateInfo{
             {}, &application_info, static_cast<uint32_t>(layers.size()), layers.begin(), extensions_count, extensions_array });

@@ -17,6 +17,13 @@ target_link_libraries(entry_d3d11_glfw3 PRIVATE animgui backend_glfw3 backend_st
 target_link_libraries(entry_d3d11_glfw3 PRIVATE glfw D3D11)
 endif()
 
+if(BACKEND_D3D12 AND BACKEND_GLFW3 AND BACKEND_STB_FONT)
+list(APPEND ENTRYS d3d12_glfw3)
+add_library(entry_d3d12_glfw3 d3d12_glfw3.cpp)
+target_link_libraries(entry_d3d12_glfw3 PRIVATE animgui backend_glfw3 backend_stb_font backend_d3d12)
+target_link_libraries(entry_d3d12_glfw3 PRIVATE glfw D3D12 DXGI)
+endif()
+
 if(BACKEND_VULKAN AND BACKEND_GLFW3 AND BACKEND_STB_FONT)
 list(APPEND ENTRYS vulkan_glfw3)
 find_package(Vulkan REQUIRED)
