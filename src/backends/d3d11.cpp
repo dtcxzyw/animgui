@@ -4,6 +4,7 @@
 #include <animgui/core/render_backend.hpp>
 #define NOMINMAX
 #include "hlsl_shaders.hpp"
+#include <array>
 #include <cassert>
 #include <cmath>
 #include <cstring>
@@ -130,14 +131,14 @@ namespace animgui {
         ID3D11Device* m_device;
         ID3D11DeviceContext* m_device_context;
         std::function<void(long)> m_error_checker;
-        vec2 m_window_size;
+        uvec2 m_window_size{};
 
         ID3D11Buffer* m_vertex_buffer = nullptr;
         size_t m_vertex_buffer_size = 0;
         ID3D11VertexShader* m_vertex_shader = nullptr;
         ID3D11InputLayout* m_input_layout = nullptr;
         ID3D11PixelShader* m_pixel_shader = nullptr;
-        ID3D11Buffer* m_constant_buffer = nullptr;
+        std::array<ID3D11Buffer*, 3> m_constant_buffer{};
         ID3D11SamplerState* m_sampler_state = nullptr;
         ID3D11RasterizerState* m_rasterizer_state = nullptr;
         ID3D11BlendState* m_blend_state = nullptr;
@@ -205,9 +206,7 @@ namespace animgui {
                 m_device_context->OMSetBlendState(m_blend_state, blend_factor, 0xFFFFFFFF);
                 m_device_context->OMSetDepthStencilState(m_depth_stencil_state, 0);
                 m_device_context->VSSetShader(m_vertex_shader, nullptr, 0);
-                m_device_context->VSSetConstantBuffers(0, 1, &m_constant_buffer);
                 m_device_context->PSSetShader(m_pixel_shader, nullptr, 0);
-                m_device_context->PSSetConstantBuffers(0, 1, &m_constant_buffer);
                 m_device_context->IASetInputLayout(m_input_layout);
                 m_device_context->GSSetShader(nullptr, nullptr, 0);
                 m_device_context->HSSetShader(nullptr, nullptr, 0);
@@ -224,13 +223,9 @@ namespace animgui {
             }
 
             {
-                // TODO: lazy update
-                D3D11_MAPPED_SUBRESOURCE mapped_resource;
-                check_d3d_error(m_device_context->Map(m_constant_buffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped_resource));
-                auto& uniform = *static_cast<constant_buffer*>(mapped_resource.pData);
-                uniform.size = m_window_size;
-                uniform.mode = (tex ? (tex->channels() == channel::alpha ? 1 : 0) : 2);
-                m_device_context->Unmap(m_constant_buffer, 0);
+                const auto mode = (tex ? (tex->channels() == channel::alpha ? 1 : 0) : 2);
+                m_device_context->VSSetConstantBuffers(0, 1, &m_constant_buffer[mode]);
+                m_device_context->PSSetConstantBuffers(0, 1, &m_constant_buffer[mode]);
             }
 
             m_device_context->IASetPrimitiveTopology(get_primitive_type(type));
@@ -250,9 +245,7 @@ namespace animgui {
 
     public:
         d3d11_backend(ID3D11Device* device, ID3D11DeviceContext* device_context, std::function<void(long)> error_checker)
-            : m_device{ device }, m_device_context{ device_context }, m_error_checker{ std::move(error_checker) }, m_window_size{
-                  0.0f, 0.0f
-              } {
+            : m_device{ device }, m_device_context{ device_context }, m_error_checker{ std::move(error_checker) } {
 
             {
                 ID3DBlob* vertex_shader_blob;
@@ -296,7 +289,8 @@ namespace animgui {
                     sizeof(constant_buffer), D3D11_USAGE_DYNAMIC, D3D11_BIND_CONSTANT_BUFFER, D3D11_CPU_ACCESS_WRITE, 0,
                     sizeof(constant_buffer)
                 };
-                check_d3d_error(m_device->CreateBuffer(&constant_buffer_desc, nullptr, &m_constant_buffer));
+                for(auto&& buffer : m_constant_buffer)
+                    check_d3d_error(m_device->CreateBuffer(&constant_buffer_desc, nullptr, &buffer));
             }
 
             {
@@ -347,14 +341,26 @@ namespace animgui {
             m_vertex_shader->Release();
             m_input_layout->Release();
             m_pixel_shader->Release();
-            m_constant_buffer->Release();
+            for(auto buffer : m_constant_buffer)
+                buffer->Release();
             m_sampler_state->Release();
             m_rasterizer_state->Release();
             m_blend_state->Release();
             m_depth_stencil_state->Release();
         }
         void update_command_list(const uvec2 window_size, command_queue command_list) override {
-            m_window_size = { static_cast<float>(window_size.x), static_cast<float>(window_size.y) };
+            if(m_window_size != window_size) {
+                for(int32_t idx = 0; idx < 3; ++idx) {
+                    D3D11_MAPPED_SUBRESOURCE mapped_resource;
+                    check_d3d_error(
+                        m_device_context->Map(m_constant_buffer[idx], 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped_resource));
+                    auto& uniform = *static_cast<constant_buffer*>(mapped_resource.pData);
+                    uniform.size = { static_cast<float>(window_size.x), static_cast<float>(window_size.y) };
+                    uniform.mode = idx;
+                    m_device_context->Unmap(m_constant_buffer[idx], 0);
+                }
+                m_window_size = window_size;
+            }
 
             update_vertex_buffer(command_list.vertices);
 
