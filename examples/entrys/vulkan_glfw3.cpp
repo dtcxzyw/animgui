@@ -151,7 +151,7 @@ int main() {
             const auto formats = physical_device.getSurfaceFormatsKHR(surface.get());
             selected_format = formats.front();
             for(auto fmt : formats) {
-                if(fmt.format == vk::Format::eB8G8R8A8Srgb && fmt.colorSpace == vk::ColorSpaceKHR::eSrgbNonlinear) {
+                if(fmt.format == vk::Format::eB8G8R8A8Unorm && fmt.colorSpace == vk::ColorSpaceKHR::eSrgbNonlinear) {
                     selected_format = fmt;
                     break;
                 }
