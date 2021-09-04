@@ -226,7 +226,7 @@ namespace animgui {
                 const auto texture_handle = reinterpret_cast<ID3D12Resource*>(tex->native_handle());
                 tex->generate_mipmap();
 
-                int32_t offset = 0;
+                int32_t offset;
                 if(const auto iter = m_texture_binding.find(texture_handle); iter != m_texture_binding.cend()) {
                     offset = iter->second;
                 } else {
@@ -235,9 +235,9 @@ namespace animgui {
                     m_texture_binding.erase(old);
 
                     // TODO: mapping
-                    D3D12_SHADER_RESOURCE_VIEW_DESC shader_resource_view_desc{ get_format(tex->channels()),
-                                                                               D3D12_SRV_DIMENSION_TEXTURE2D,
-                                                                               D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING };
+                    D3D12_SHADER_RESOURCE_VIEW_DESC shader_resource_view_desc{
+                        get_format(tex->channels()), D3D12_SRV_DIMENSION_TEXTURE2D, D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING, {}
+                    };
                     shader_resource_view_desc.Texture2D = { 0, 0, 0, 0.0f };
 
                     m_device->CreateShaderResourceView(
@@ -438,7 +438,7 @@ namespace animgui {
             return std::make_shared<texture_impl>(reinterpret_cast<ID3D12Resource*>(handle), m_device, m_synchronized_transferer,
                                                   channels, size, m_error_checker);
         }
-        void update_command_list(const uvec2 window_size, const command_queue command_list) override {
+        void update_command_list(const uvec2 window_size, command_queue command_list) override {
             if(m_window_size != window_size) {
                 const D3D12_RANGE discard{ 0, 0 };
                 constant_buffer* ptr;

@@ -21,9 +21,9 @@
 
 #if defined(ANIMGUI_WINDOWS)
 #if defined(ANIMGUI_EXPORT)
-#define ANIMGUI_API __declspec(dllexport)
+#define ANIMGUI_API __declspec(dllexport)  // NOLINT(cppcoreguidelines-macro-usage)
 #else
-#define ANIMGUI_API __declspec(dllimport)
+#define ANIMGUI_API __declspec(dllimport)  // NOLINT(cppcoreguidelines-macro-usage)
 #endif
 #else
 #define ANIMGUI_API

@@ -9,10 +9,12 @@
 namespace animgui {
 
     static const uint32_t vert_spv[] =
+    // ReSharper disable once CppUnusedIncludeDirective
 #include "vert.spv.hpp"
         ;
 
     static const uint32_t frag_spv[] =
+    // ReSharper disable once CppUnusedIncludeDirective
 #include "frag.spv.hpp"
         ;
 

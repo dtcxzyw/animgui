@@ -48,6 +48,12 @@ int main() {
     glfwGetMonitorWorkarea(glfwGetPrimaryMonitor(), nullptr, nullptr, &screen_w, &screen_h);
     glfwSetWindowPos(window, (screen_w - w) / 2, (screen_h - h) / 2);
 
+#ifdef ANIMGUI_DEBUG
+    ID3D12Debug* debug_layer0;
+    check_d3d12_error(D3D12GetDebugInterface(IID_PPV_ARGS(&debug_layer0)));
+    debug_layer0->EnableDebugLayer();
+#endif
+
     IDXGIFactory4* dxgi_factory;
     check_d3d12_error(CreateDXGIFactory1(IID_PPV_ARGS(&dxgi_factory)));
 
@@ -56,7 +62,8 @@ int main() {
         DXGI_ADAPTER_DESC1 desc;
         check_d3d12_error(dxgi_adapter->GetDesc1(&desc));
         if(!(desc.Flags & DXGI_ADAPTER_FLAG_SOFTWARE)) {
-            std::cout << "D3D12 Adapter: " << desc.Description << std::endl;
+            const auto str = desc.Description;
+            std::wcout << L"D3D12 Adapter: " << str << std::endl;
             break;
         }
         dxgi_adapter->Release();
@@ -64,7 +71,6 @@ int main() {
 
     ID3D12Device* device;
     check_d3d12_error(D3D12CreateDevice(dxgi_adapter, D3D_FEATURE_LEVEL_12_1, IID_PPV_ARGS(&device)));
-    // TODO: debug layer
 
     ID3D12CommandQueue* command_queue;
     const D3D12_COMMAND_QUEUE_DESC command_queue_desc{};
@@ -88,6 +94,7 @@ int main() {
                                           0 };
     IDXGISwapChain3* swap_chain;
     check_d3d12_error(dxgi_factory->CreateSwapChain(device, &swap_chain_desc, reinterpret_cast<IDXGISwapChain**>(&swap_chain)));
+    check_d3d12_error(dxgi_factory->MakeWindowAssociation(glfwGetWin32Window(window), DXGI_MWA_NO_ALT_ENTER));
 
     const D3D12_DESCRIPTOR_HEAP_DESC descriptor_heap_desc{ D3D12_DESCRIPTOR_HEAP_TYPE_RTV, buffer_count,
                                                            D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE, 0 };
@@ -239,6 +246,10 @@ int main() {
     device->Release();
     dxgi_adapter->Release();
     dxgi_factory->Release();
+
+#ifdef ANIMGUI_DEBUG
+    debug_layer0->Release();
+#endif
 
     glfwDestroyWindow(window);
     glfwTerminate();
