@@ -18,18 +18,14 @@
 #include <array>
 #include <cstdlib>
 #include <directx/d3dx12.h>
-#include <dxgi1_4.h>
+#include <dxgi1_6.h>
+#include <dxgidebug.h>
 #include <iostream>
 #include <string>
 
 [[noreturn]] void fail(const std::string& str) {
-    std::cout << str << std::endl;
-    std::_Exit(EXIT_FAILURE);
-}
-
-void check_d3d12_error(const HRESULT res) {
-    if(res != S_OK)
-        fail("D3D12 Error " + std::to_string(res));
+    std::cerr << str << std::endl;
+    // std::_Exit(EXIT_FAILURE);
 }
 
 int main() {
@@ -48,14 +44,31 @@ int main() {
     glfwGetMonitorWorkarea(glfwGetPrimaryMonitor(), nullptr, nullptr, &screen_w, &screen_h);
     glfwSetWindowPos(window, (screen_w - w) / 2, (screen_h - h) / 2);
 
+    ID3D12Device* device = nullptr;
+    auto check_d3d12_error = [&](const HRESULT res) {
+        if(res != S_OK) {
+            fail("D3D12 Error " + std::to_string(res) +
+                 (device && res == DXGI_ERROR_DEVICE_REMOVED ?
+                      "[Removed Reason=" + std::to_string(device->GetDeviceRemovedReason()) + "]" :
+                      ""));
+        }
+    };
+
 #ifdef ANIMGUI_DEBUG
     ID3D12Debug* debug_layer0;
     check_d3d12_error(D3D12GetDebugInterface(IID_PPV_ARGS(&debug_layer0)));
     debug_layer0->EnableDebugLayer();
+    ID3D12Debug1* debug_layer1;
+    check_d3d12_error(debug_layer0->QueryInterface(IID_PPV_ARGS(&debug_layer1)));
+    debug_layer1->SetEnableGPUBasedValidation(true);
+
+    constexpr UINT dxgi_flag = DXGI_CREATE_FACTORY_DEBUG;
+#else
+    constexpr UINT dxgi_flag = 0;
 #endif
 
-    IDXGIFactory4* dxgi_factory;
-    check_d3d12_error(CreateDXGIFactory1(IID_PPV_ARGS(&dxgi_factory)));
+    IDXGIFactory7* dxgi_factory;
+    check_d3d12_error(CreateDXGIFactory2(dxgi_flag, IID_PPV_ARGS(&dxgi_factory)));
 
     IDXGIAdapter1* dxgi_adapter = nullptr;
     for(UINT idx = 0; dxgi_factory->EnumAdapters1(idx, &dxgi_adapter) != DXGI_ERROR_NOT_FOUND; ++idx) {
@@ -69,7 +82,6 @@ int main() {
         dxgi_adapter->Release();
     }
 
-    ID3D12Device* device;
     check_d3d12_error(D3D12CreateDevice(dxgi_adapter, D3D_FEATURE_LEVEL_12_1, IID_PPV_ARGS(&device)));
 
     ID3D12CommandQueue* command_queue;
@@ -77,27 +89,28 @@ int main() {
     check_d3d12_error(device->CreateCommandQueue(&command_queue_desc, IID_PPV_ARGS(&command_queue)));
 
     constexpr UINT buffer_count = 2;
-    constexpr UINT sample_count = 8;
+    // TODO: MSAA
+    constexpr UINT sample_count = 1;
 
-    DXGI_SWAP_CHAIN_DESC swap_chain_desc{ { static_cast<uint32_t>(w),
-                                            static_cast<uint32_t>(h),
-                                            {},
-                                            DXGI_FORMAT_R8G8B8A8_UNORM,
-                                            DXGI_MODE_SCANLINE_ORDER_UNSPECIFIED,
-                                            DXGI_MODE_SCALING_UNSPECIFIED },
-                                          { sample_count, 0 },
-                                          DXGI_USAGE_RENDER_TARGET_OUTPUT,
-                                          buffer_count,
-                                          glfwGetWin32Window(window),
-                                          true,
-                                          DXGI_SWAP_EFFECT_FLIP_DISCARD,
-                                          0 };
+    DXGI_SWAP_CHAIN_DESC1 swap_chain_desc{ static_cast<uint32_t>(w),
+                                           static_cast<uint32_t>(h),
+                                           DXGI_FORMAT_R8G8B8A8_UNORM,
+                                           false,
+                                           { sample_count, 0 },
+                                           DXGI_USAGE_RENDER_TARGET_OUTPUT,
+                                           buffer_count,
+                                           DXGI_SCALING_STRETCH,
+                                           DXGI_SWAP_EFFECT_FLIP_SEQUENTIAL,
+                                           DXGI_ALPHA_MODE_IGNORE,
+                                           DXGI_SWAP_CHAIN_FLAG_DISPLAY_ONLY };
     IDXGISwapChain3* swap_chain;
-    check_d3d12_error(dxgi_factory->CreateSwapChain(device, &swap_chain_desc, reinterpret_cast<IDXGISwapChain**>(&swap_chain)));
+    check_d3d12_error(dxgi_factory->CreateSwapChainForHwnd(command_queue, glfwGetWin32Window(window), &swap_chain_desc, nullptr,
+                                                           nullptr, reinterpret_cast<IDXGISwapChain1**>(&swap_chain)));
+
     check_d3d12_error(dxgi_factory->MakeWindowAssociation(glfwGetWin32Window(window), DXGI_MWA_NO_ALT_ENTER));
 
     const D3D12_DESCRIPTOR_HEAP_DESC descriptor_heap_desc{ D3D12_DESCRIPTOR_HEAP_TYPE_RTV, buffer_count,
-                                                           D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE, 0 };
+                                                           D3D12_DESCRIPTOR_HEAP_FLAG_NONE, 0 };
     ID3D12DescriptorHeap* descriptor_heap;
     check_d3d12_error(device->CreateDescriptorHeap(&descriptor_heap_desc, IID_PPV_ARGS(&descriptor_heap)));
     std::array<std::tuple<ID3D12Resource*, ID3D12CommandAllocator*, ID3D12Fence*, uint64_t>, buffer_count> frame_buffers;
@@ -123,8 +136,10 @@ int main() {
     check_d3d12_error(device->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&synchronized_fence)));
 
     ID3D12GraphicsCommandList* command_list;
-    device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, std::get<ID3D12CommandAllocator*>(frame_buffers[0]), nullptr,
-                              IID_PPV_ARGS(&command_list));
+    check_d3d12_error(device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT,
+                                                std::get<ID3D12CommandAllocator*>(frame_buffers[0]), nullptr,
+                                                IID_PPV_ARGS(&command_list)));
+    check_d3d12_error(command_list->Close());
 
     ID3D12CommandAllocator* synchronized_allocator;
     check_d3d12_error(device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&synchronized_allocator)));
@@ -138,7 +153,7 @@ int main() {
             command_queue->ExecuteCommandLists(1, reinterpret_cast<ID3D12CommandList**>(&command_list));
             const auto next_value = synchronized_fence->GetCompletedValue();
             synchronized_fence->SetEventOnCompletion(next_value + 1, synchronized_fence_event);
-            check_d3d12_error(command_queue->Signal(synchronized_fence, next_value));
+            check_d3d12_error(command_queue->Signal(synchronized_fence, next_value + 1));
             WaitForSingleObject(synchronized_fence_event, INFINITE);
         };
         std::pmr::memory_resource* memory_resource = std::pmr::get_default_resource();
@@ -166,7 +181,27 @@ int main() {
 
             if(cur_w != w || cur_h != h) {
 
+                for(uint32_t idx = 0; idx < buffer_count; ++idx) {
+                    auto& [render_target_view, command_allocator, fence, fence_count] = frame_buffers[idx];
+
+                    if(fence->GetCompletedValue() < fence_count) {
+                        check_d3d12_error(fence->SetEventOnCompletion(fence_count, fence_event));
+                        WaitForSingleObject(fence_event, INFINITE);
+                    }
+
+                    render_target_view->Release();
+                }
+
                 check_d3d12_error(swap_chain->ResizeBuffers(0, cur_w, cur_h, DXGI_FORMAT_UNKNOWN, 0));
+
+                CD3DX12_CPU_DESCRIPTOR_HANDLE rtv_handle{ descriptor_heap->GetCPUDescriptorHandleForHeapStart() };
+                for(uint32_t idx = 0; idx < buffer_count; ++idx) {
+                    auto&& [render_target_view, command_allocator, fence, fence_count] = frame_buffers[idx];
+
+                    check_d3d12_error(swap_chain->GetBuffer(idx, IID_PPV_ARGS(&render_target_view)));
+                    device->CreateRenderTargetView(render_target_view, nullptr, rtv_handle);
+                    rtv_handle.Offset(1, rtv_descriptor_size);
+                }
 
                 w = cur_w;
                 h = cur_h;
@@ -248,7 +283,9 @@ int main() {
     dxgi_factory->Release();
 
 #ifdef ANIMGUI_DEBUG
+    debug_layer1->Release();
     debug_layer0->Release();
+    // IDXGIDebug::ReportLiveObjects();
 #endif
 
     glfwDestroyWindow(window);

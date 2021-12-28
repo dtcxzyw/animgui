@@ -26,6 +26,26 @@ Direct3D 11后端
     // error_checker: 渲染后端内部D3D11错误回调，参数类型为HRESULT（long）
     std::shared_ptr<render_backend> create_d3d11_backend(ID3D11Device* device, ID3D11DeviceContext* device_context, const std::function<void(long)>& error_checker);
 
+Direct3D 12后端
+-----------------------------------
+
+在Windows下默认构建D3D12后端。
+
+在<animgui/backends/d3d12.hpp>下：
+
+.. code-block:: c++
+
+    using synchronized_executor = std::function<void(const std::function<void(ID3D12GraphicsCommandList*)>&)>;
+
+    // device: D3D12的设备实例
+    // command_list: 指令缓冲，用于提交绘制指令
+    // synchronized_transferer: 同步指令执行回调，用于纹理阻塞更新。请确保所提交的queue支持transfer
+    // sample_count: MSAA采样数
+    // error_checker: 渲染后端内部D3D12错误回调，参数类型为HRESULT（long）
+    std::shared_ptr<render_backend> create_d3d12_backend(ID3D12Device* device, ID3D12GraphicsCommandList* command_list, uint32_t sample_count,
+        synchronized_executor synchronized_transferer, std::function<void(long)> error_checker);
+
+
 Vulkan后端
 -----------------------------------
 

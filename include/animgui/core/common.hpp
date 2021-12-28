@@ -31,10 +31,10 @@
 
 namespace animgui {
     struct color_rgba final {
-        float r, g, b, a;
+        float r = 0.0f, g = 0.0f, b = 0.0f, a = 0.0f;
     };
     struct vec2 final {
-        float x, y;
+        float x = 0.0f, y = 0.0f;
         constexpr vec2 operator+(const vec2 rhs) const noexcept {
             return { x + rhs.x, y + rhs.y };
         }
@@ -43,13 +43,13 @@ namespace animgui {
         }
     };
     struct uvec2 final {
-        uint32_t x, y;
+        uint32_t x = 0, y = 0;
         [[nodiscard]] constexpr bool operator!=(const uvec2 rhs) const noexcept {
             return x != rhs.x || y != rhs.y;
         }
     };
     struct bounds_aabb final {
-        float left, right, top, bottom;
+        float left = 0.0f, right = 0.0f, top = 0.0f, bottom = 0.0f;
 
         [[nodiscard]] constexpr vec2 size() const noexcept {
             return { right - left, bottom - top };
@@ -63,13 +63,13 @@ namespace animgui {
             return std::isinf(left);
         }
     };
-    inline void offset_bounds(bounds_aabb& sub, const vec2 offset) {
+    inline void offset_bounds(bounds_aabb& sub, const vec2 offset) noexcept {
         sub.left += offset.x;
         sub.right += offset.x;
         sub.top += offset.y;
         sub.bottom += offset.y;
     }
-    inline bool clip_bounds(bounds_aabb& sub, const vec2 offset, const bounds_aabb& parent) {
+    inline bool clip_bounds(bounds_aabb& sub, const vec2 offset, const bounds_aabb& parent) noexcept {
         offset_bounds(sub, offset);
 
         sub.left = std::fmax(sub.left, parent.left);
@@ -79,7 +79,7 @@ namespace animgui {
         return sub.left < sub.right && sub.top < sub.bottom;
     }
 
-    inline bool intersect_bounds(const bounds_aabb& lhs, const bounds_aabb& rhs) {
+    inline bool intersect_bounds(const bounds_aabb& lhs, const bounds_aabb& rhs) noexcept {
         return std::fmax(lhs.left, rhs.left) < std::fmin(lhs.right, rhs.right) &&
             std::fmax(lhs.top, rhs.top) < std::fmin(lhs.bottom, rhs.bottom);
     }
@@ -96,7 +96,7 @@ namespace animgui {
             return rhs.id;
         }
     };
-    inline identifier mix(const identifier parent, const identifier child) {
+    inline identifier mix(const identifier parent, const identifier child) noexcept {
         return identifier{ parent.id ^ (parent.id >> 1) ^ child.id ^ (child.id * 48271) };
     }
 

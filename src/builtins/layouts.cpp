@@ -458,10 +458,10 @@ namespace animgui {
                 if(win.id == id)
                     return win;
             m_info.push_back({ id, default_bounds(), { 0.0f, 0.0f, 0.0f, 0.0f }, true, true });
-            return m_info.front();
+            return m_info.back();
         }
 
-        static void clamp_bounds(bounds_aabb& bounds, const vec2 size) {
+        static void clamp_bounds(bounds_aabb& bounds, const vec2 size) noexcept {
             if(bounds.left < 0.0f) {
                 bounds.right -= bounds.left;
                 bounds.left = 0.0f;
@@ -546,6 +546,7 @@ namespace animgui {
                             } break;
                         }
                     }
+
                     bounds.right = bounds.left + content_bounds.right - content_bounds.left;
                     bounds.bottom = bounds.top + content_bounds.bottom - content_bounds.top;
                     const auto [padding_x, padding_y] = global_style().padding;
