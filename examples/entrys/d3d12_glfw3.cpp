@@ -88,7 +88,7 @@ int main() {
     const D3D12_COMMAND_QUEUE_DESC command_queue_desc{};
     check_d3d12_error(device->CreateCommandQueue(&command_queue_desc, IID_PPV_ARGS(&command_queue)));
 
-    constexpr UINT buffer_count = 2;
+    constexpr UINT buffer_count = 4;
     // TODO: MSAA
     constexpr UINT sample_count = 1;
 
