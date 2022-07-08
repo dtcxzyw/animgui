@@ -23,6 +23,7 @@ namespace animgui {
         return std::make_shared<command_optimizer_noop>();
     }
 
+    // FIXME: cannot handle user callback correctly in stage 2
     class command_optimizer_builtin final : public command_optimizer {
         using command_queue_sub = std::pmr::vector<std::pair<command, std::pmr::vector<std::pair<uint32_t, uint32_t>>>>;
         using command_pusher = std::function<void(std::pair<command, std::pmr::vector<std::pair<uint32_t, uint32_t>>>)>;
@@ -248,6 +249,7 @@ namespace animgui {
     };
 
     ANIMGUI_API std::shared_ptr<command_optimizer> create_builtin_command_optimizer() {
-        return std::make_shared<command_optimizer_builtin>();
+        return std::make_shared<command_optimizer_noop>(); // use noop command optimizer instead due to the bug
+	// return std::make_shared<command_optimizer_builtin>();
     }
 }  // namespace animgui
