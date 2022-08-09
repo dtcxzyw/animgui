@@ -11,9 +11,9 @@ if(BACKEND_GLFW3)
 endif()
 
 if(BACKEND_STB_FONT)
-    find_path(STB_INCLUDE_DIRS "stb/stb_truetype.h")
+    find_path(STB_INCLUDE_DIRS "stb_truetype.h")
     add_library(backend_stb_font SHARED stbfont.cpp)
-    target_include_directories(backend_stb_font PRIVATE ${STB_INCLUDE_DIRS}/stb)
+    target_include_directories(backend_stb_font PRIVATE ${STB_INCLUDE_DIRS})
     target_compile_definitions(backend_stb_font PRIVATE ANIMGUI_EXPORT)
 endif()
 

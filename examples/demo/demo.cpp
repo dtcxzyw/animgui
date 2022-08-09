@@ -28,7 +28,7 @@ namespace animgui {
 #if defined(ANIMGUI_WINDOWS)
             style.default_font = context.load_font("msyh", 30.0f);
 #elif defined(ANIMGUI_LINUX)
-            style.default_font = context.load_font("/nix/store/sksvv8dacm5k66hinhyhlckbjqx1s351-source-sans-pro-3.006/share/fonts/truetype/SourceSansPro-Regular.ttf", 30.0f);
+            style.default_font = context.load_font("/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc", 30.0f);
 #elif defined(ANIMGUI_MACOS)
             style.default_font = context.load_font("STHeiti Light", 30.0f);
 #endif
