@@ -2,6 +2,7 @@
 
 #pragma once
 #include <animgui/core/common.hpp>
+#include <memory>
 #include <vulkan/vulkan.hpp>
 
 namespace animgui {
