@@ -7,6 +7,7 @@
 #include <cassert>
 #include <cmath>
 #include <cstring>
+#include <directx/d3dcommon.h>
 #include <d3dcompiler.h>
 #include <directx/d3dx12.h>
 #include <queue>
