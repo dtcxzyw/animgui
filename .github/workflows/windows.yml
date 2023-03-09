@@ -15,7 +15,7 @@ jobs:
     env:
       VULKAN_SDK: ${{github.workspace}}/Vulkan
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v3
     
     - name: Install Dependencies
       run: |
